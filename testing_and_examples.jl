@@ -17,7 +17,7 @@ mps = MPS.randomMPS(latticeSize,2,maxBondDim)
 MPS.makeCanonical(mps)
 # println("overlap: ",MPS.MPSoverlap(mps,mps2))
 # println(MPS.check_LRcanonical(mps[1],1))
-
+MPS.println(mps)
 @time ground,E = MPS.DMRG(mps,hamiltonian,prec)
 println("entropy: ",MPS.entropy(ground,3))
 @time exc,E = MPS.DMRG(mps,hamiltonian,prec,ground)
