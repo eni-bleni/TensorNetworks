@@ -36,6 +36,20 @@ sz = [1 0; 0 -1]
 si = [1 0; 0 1]
 s0 = [0 0; 0 0]
 
+
+""" OneSiteMPO(L, j, op)
+returns a MPO of length L with identities at each site and operator 'op' at site j """
+function OneSiteMPO(L, j, op)
+    mpo = Array{Any}(L)
+    for i = 1:L
+        mpo[i] = reshape(si, 1,2,2,1)
+    end
+    mpo[j] = reshape(op, 1,2,2,1)
+
+    return mpo
+end
+
+
 """ Returns the Hamiltonian for the Ising model in transverse field as an MPO
 
 ```IsingMPO(lattice sites,J,transverse,longitudinal)```"""
