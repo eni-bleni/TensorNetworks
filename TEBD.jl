@@ -58,11 +58,15 @@ function block_decimation(W, Tl, Tr, Dmax)
     return Tl, Tr
 end
 
-function TEBDsteps(mps,block,stepsize,steps,D)
+function time_evolve(mps, block, total_time, steps, D, mpo=nothing)
+    ### block = hamiltonian
+    ### use negative imaginary total_time for imaginary time evolution
+
     d = size(mps[1])[2]
     L = length(mps)
-    W = expm(-1im*stepsize*block/steps)
+    W = expm(-1im*total_time*block/steps)
     W = reshape(W, (d,d,d,d))
+    expect = Array{Any}(steps,2)
 
     for counter = 1:steps
         for i = 1:2:L-1 # odd sites
@@ -72,8 +76,17 @@ function TEBDsteps(mps,block,stepsize,steps,D)
         for i = 2:2:L-1 # even sites
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
         end
-        # makeCanonical(mps)
+        if imag(total_time) != 0.0 # normalization in case of imaginary time evolution
+            MPS.makeCanonical(mps)
+        end
+
+        ## expectation values:
+        if mpo != nothing
+            expect[counter,:] = [counter*total_time/steps MPS.mpoExpectation(mps,mpo)]
+        end
     end
+
+    return expect
 end
 
 end
