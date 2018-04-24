@@ -71,7 +71,7 @@ println("\nOverlap: ",MPS.MPSoverlap(exc,ground))
 #
 #
 # ## method 2: (as in iTEBD)
-# ham = TEBD.IsingHamiltonian(J,h,g)
+# ham = TEBD.TwoSiteIsingHamiltonian(J,h,g)
 # if imag_time == 1
 #     W = expm(-dt*ham)
 # else
