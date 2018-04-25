@@ -101,8 +101,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, mpo=nothing)
 
     for counter = 1:steps
         for i = 1:2:L-1 # odd sites
-
-            W = expm(-1im*block(i,counter*total_time/steps))
+            W = expm(-1im*stepsize*block(i,counter*total_time/steps))
             W = reshape(W, (d,d,d,d))
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
         end

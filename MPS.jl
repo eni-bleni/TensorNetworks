@@ -417,10 +417,8 @@ function entropy(mps,i)
     sz = size(mps[i+1])
     tensor = reshape(mps[i+1],sz[1],sz[2]*sz[3])
     U,S,V = svd(tensor)
-    # S = S.^2/dot(S,S)
-    println(norm(S))
+    S = S.^2
     return -dot(S,log.(S))
-
 end
 
 end
