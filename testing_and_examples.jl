@@ -31,7 +31,7 @@ hamiltonian = MPS.IsingMPO(latticeSize,J,h,g)
 mps = MPS.randomMPS(latticeSize,2,maxBondDim)
 # mps2 = MPS.canonicalMPS(mps,1)
 MPS.makeCanonical(mps)
-# println("overlap: ",MPS.MPSoverlap(mps,mps2))
+println("overlap: ",MPS.MPSoverlap(mps,mps2))
 # println(MPS.check_LRcanonical(mps[1],1))
 
 @time ground,E = MPS.DMRG(mps,hamiltonian,prec)
