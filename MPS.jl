@@ -140,7 +140,7 @@ end
 """ employs the variational MPS method to find the ground state/energy.
     The state will be orthogonal to orth (optional argument).
 
-    ```DMRG(mps,hamiltonian mpo,precision,orth=nothing)```"""
+    ```DMRG(mps,hamiltonian mpo,precision,orth=nothing) -> mps, energy```"""
 function DMRG(mps_input, mpo, prec, orth=nothing)
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
@@ -205,12 +205,12 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,so[1]*so[2]*so[3])
             orthvector = orthvector/norm(orthvector)
-            proj = [zeros(orthvector') nullspace(orthvector)]'
+            proj = nullspace(orthvector)'
             Heff = proj * Heff * proj'
-            mpsguess = proj'*mpsguess
+            mpsguess = proj*mpsguess
         end
 
-        evals, evecs = eigs(Heff,nev=1,which=:SR,tol=prec,v0=mpsguess)
+        evals, evecs = eigs(Heff,nev=2,which=:SR,tol=prec,v0=mpsguess)
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
             return 0
@@ -312,64 +312,6 @@ function getHeff(mps,mpo,HL,HR,i)
     return Heff
 end
 
-""" constructs the effective Hamiltonian = environment around site j """
-function constr_Heff(mps, mpo, j)
-    L = length(mps)
-
-    if j == 1 # first effective Hamiltonian = environment with blanks at mps[1]
-
-         # start all contractions from right side
-        @tensor   r[-1,-2,-3] := mps[L][-1,4,1]*mpo[L][-2,4,5]*conj(mps[L][-3,5,1])
-
-        for i = L-1:-1:2
-            @tensor begin
-                r[-1,-2,-3] := mps[i][-1,4,1]*mpo[i][-2,4,5,2]*conj(mps[i][-3,5,3])*r[1,2,3]
-            end
-        end
-        @tensor begin
-            Heff[-1,-2,-3,-4] := mpo[1][-2,-3,2]*r[-1,2,-4]
-        end
-    elseif 1<j<L # j-th effective hamiltonian: contract blocks from left and right
-        @tensor begin
-            l[-1,-2,-3] := mps[1][1,2,-1]*mpo[1][2,3,-2]*conj(mps[1][1,3,-3])
-            r[-1,-2,-3] := mps[L][-1,2,1]*mpo[L][-2,2,3]*conj(mps[L][-3,3,1])
-        end
-        if j > 2               # left block becomes only larger for j>2
-            for i = 2:j-1      # contract block to the left of site j
-                @tensor begin
-                    l[-1,-2,-3] := l[1,2,3]*mps[i][1,4,-1]*mpo[i][2,4,5,-2]*conj(mps[i][3,5,-3])
-                end
-            end
-        end
-        if j < L-1             # right block becomes only larger for j<L-1
-            for i = L-1:-1:j+1 # contract block to the right of site j
-                @tensor begin
-                    r[-1,-2,-3] := mps[i][-1,4,1]*mpo[i][-2,4,5,2]*conj(mps[i][-3,5,3])*r[1,2,3]
-                end
-            end
-        end
-        @tensor begin
-            Heff[-1,-2,-3,-4,-5,-6] := l[-1,2,-4]*mpo[j][2,-2,-5,3]*r[-3,3,-6]
-        end
-    elseif j == L # last effective Hamiltonian = environment with blanks at mps[L]
-        @tensor begin # start all contractions from left side
-            l[-1,-2,-3] := mps[1][1,4,-1]*mpo[1][4,5,-2]*conj(mps[1][1,5,-3])
-        end
-        for i = 2:L-1
-            @tensor begin
-                l[-1,-2,-3] := l[1,2,3]*mps[i][1,4,-1]*mpo[i][2,4,5,-2]*conj(mps[i][3,5,-3])
-            end
-        end
-        @tensor begin
-            Heff[-1,-2,-3,-4] := l[-1,2,-4]*mpo[L][2,-2,-3]
-        end
-    else
-        println("ERROR in constr_Heff: j not identified")
-    end
-
-    return Heff
-end
-
 """ returns the mpo expectation value <mps|mpo|mps>
 
     ```mpoExpectation(mps,mpo)```"""
@@ -399,7 +341,7 @@ function mpoSquaredExpectation(mps, mpo)
     F = Array{Complex64}(1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
-        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][2,5,6,-2]*mpo[i][3,6,7,-3]*conj(mps[i][1,7,-1])
+       @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
     end
     return F[1,1,1,1]
 end
@@ -471,14 +413,12 @@ end
 """ UNFINISHED. Von Neumann entropy across link i
 ``` entropy(mps,i) -> S```"""
 function entropy(mps,i)
-    makeCanonical(mps)
+    makeCanonical(mps,i+1)
     sz = size(mps[i+1])
     tensor = reshape(mps[i+1],sz[1],sz[2]*sz[3])
     U,S,V = svd(tensor)
-    # S = S.^2/dot(S,S)
-    println(norm(S))
+    S = S.^2
     return -dot(S,log.(S))
-
 end
 
 end

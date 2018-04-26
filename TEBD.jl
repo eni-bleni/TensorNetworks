@@ -100,4 +100,40 @@ function time_evolve(mps, block, total_time, steps, D, mpo=nothing)
     return expect
 end
 
+function time_evolve_mpoham(mps, block, total_time, steps, D, mpo=nothing)
+    ### block = hamiltonian
+    ### use negative imaginary total_time for imaginary time evolution
+    stepsize = total_time/steps
+    d = size(mps[1])[2]
+    L = length(mps)
+
+    expect = Array{Any}(steps,2)
+
+    for counter = 1:steps
+        for i = 1:2:L-1 # odd sites
+            W = expm(-1im*stepsize*block(i,counter*total_time/steps))
+>>>>>>> 14fda1b313c7c64f14fa7ee6188b8b404a0f5df5
+            W = reshape(W, (d,d,d,d))
+            mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
+        end
+
+        for i = 2:2:L-1 # even sites
+            W = expm(-1im*stepsize*block(i,counter*total_time/steps))
+            W = reshape(W, (d,d,d,d))
+            mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
+        end
+        if imag(total_time) != 0.0 # normalization in case of imaginary time evolution
+            MPS.makeCanonical(mps)
+        end
+
+        ## expectation values:
+        if mpo != nothing
+            expect[counter,:] = [counter*total_time/steps MPS.mpoExpectation(mps,mpo)]
+        end
+    end
+
+    return expect
+end
+
+
 end

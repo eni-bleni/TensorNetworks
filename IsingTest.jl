@@ -1,6 +1,8 @@
 using MPS
 using TEBD
 using TensorOperations
+using Plots
+plotlyjs()
 println("\n---------------------------------------")
 
 ################################################################################
@@ -8,18 +10,18 @@ println("\n---------------------------------------")
 ################################################################################
 
 ##================================================ Ising model:
-latticeSize = 20
+latticeSize = 10
 J = 1.0
-h = 0.2
-g = 0.8
+h = 0
+g = 0
 maxBondDim = 40
 prec = 1e-8
 
 hamiltonian = MPS.IsingMPO(latticeSize,J,h,g)
-
+hamiltonian = MPS.HeisenbergMPO(latticeSize,1,1,1,1)
 mps = MPS.randomMPS(latticeSize,2,maxBondDim)
 
-mps = MPS.canonicalMPS(mps,1)
+MPS.makeCanonical(mps)
 
 @time ground,E = MPS.DMRG(mps,hamiltonian,prec)
 
@@ -106,5 +108,3 @@ println("\nOverlap: ",MPS.MPSoverlap(exc,ground))
 # println( "E = ", MPS.mpoExpectation(mps, MPS.IsingMPO(N,J,h,g)) )
 # println( "E/N = ", MPS.mpoExpectation(mps, MPS.IsingMPO(N,J,h,g))/(N-1) )
 # println("norm: ", MPS.MPSnorm(mps))
-
-;
