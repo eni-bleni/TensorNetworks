@@ -5,7 +5,7 @@ println("\n---------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = 20
+maxBondDim = 40
 d = 2
 prec = 1e-8
 
@@ -18,7 +18,7 @@ g = 0.0
 Jx = 1.0
 Jy = 1.0
 Jz = 1.0
-hx = 0.0
+hx = 1.0
 
 ## TEBD parameters:
 total_time = -im*10.0 # -im*total_time  for imag time evol
@@ -48,9 +48,9 @@ MPS.makeCanonical(mps)
 println("E/N = ", E/(latticeSize-1))
 # println("entropy: ",MPS.entropy(ground,3))
 
-# println("\n...performing excited state DMRG...")
-# @time exc,E = MPS.DMRG(mps,hamiltonian,prec,ground)
-# println("Overlap: ",MPS.MPSoverlap(exc,ground))
+println("\n...performing excited state DMRG...")
+@time exc,E = MPS.DMRG(mps,hamiltonian,prec,ground)
+println("Overlap: ",MPS.MPSoverlap(exc,ground))
 
 
 
