@@ -341,7 +341,7 @@ function mpoSquaredExpectation(mps, mpo)
     F = Array{Complex64}(1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
-        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
+       @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
     end
     return F[1,1,1,1]
 end

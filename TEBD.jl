@@ -19,6 +19,16 @@ function TwoSiteIsingHamiltonian(J,h,g)
     return H
 end
 
+function TwoSiteHeisenbergHamiltonian(Jx,Jy,Jz,hx)
+    XX = kron(sx, sx)
+    YY = kron(sy, sy)
+    ZZ = kron(sz, sz)
+    XI = kron(sx, si)
+    IX = kron(si, sx)
+    H = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+IX) 
+    return H
+end
+
 function truncate_svd(U, S, V, D)
     U = U[:, 1:D]
     S = S[1:D]

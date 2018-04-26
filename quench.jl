@@ -3,7 +3,6 @@ using TEBD
 using TensorOperations
 using Plots
 prec = 1e-8
-<<<<<<< HEAD
 D = 100
 L = 20
 sx = [0 1; 1 0]
@@ -30,14 +29,7 @@ function isingQuench(i,time)
     end
 end
 hamiltonian = MPS.IsingMPO(L,J,h0,0)
-=======
-D = 10
-L = 10
-function isingQuench(i,time)
-    return TEBD.TwoSiteIsingHamiltonian(1,sin(time),0)
-end
-hamiltonian = MPS.IsingMPO(L,1,0,0)
->>>>>>> 6fc2331739feb39510b6cf486f041f6ab39b5702
+
 mps = MPS.randomMPS(L,2,D)
 MPS.makeCanonical(mps)
 ground,Eground = MPS.DMRG(mps,hamiltonian,prec)
@@ -49,11 +41,6 @@ ground,Eground = MPS.DMRG(mps,hamiltonian,prec)
 ## PLOTTING
 # plot(abs.(expect[:,1]), real.(expect[:,2]), show=true)
 
-<<<<<<< HEAD
 # energy = TEBD.time_evolve_mpoham(ground,isingQuench,-10im,1000,D,hamiltonian)
 energy = TEBD.time_evolve_mpoham(ground,isingQuench,6,1000,D,hamiltonian)
-=======
-
-energy = TEBD.time_evolve_mpoham(ground,isingQuench,1,1000,D,hamiltonian)
->>>>>>> 6fc2331739feb39510b6cf486f041f6ab39b5702
 plot(abs.(energy[:,1]), real.(energy[:,2]), show=true)
