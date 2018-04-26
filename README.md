@@ -11,6 +11,27 @@ i) module MPS:
 
    functions:
 
+function LRcanonical(M,dir)
+  -> returns the left or right canonical form of a single MPS tensor
+  input:
+  M: tensor of size (D1,d,D2)
+  dir: direction, -1 is leftcanonical, 1 is rightcanonical
+  output:
+  A,R,DB: matrices A and R from qr decomposition and intermediate bond dimension DB
+
+function OneSiteMPO(L, j, op)
+  -> returns a MPO of length L with identities at each site and operator 'op' at site j
+     e.g. for magnetization: op = sx (Pauli matrix)
+
+function IsingMPO(L, J, h, g)
+-> returns the Hamiltonian for the Ising model in transverse field as an MPO
+input:   
+L: lenght of mpo = number of sites/tensors
+J,h,g: Ising Hamiltonian params
+output:
+mpo: constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
+first site: (1,i,j,b); last site: (a,i,j,1)
+
 
 
 # ToDo
