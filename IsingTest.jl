@@ -12,13 +12,13 @@ println("\n---------------------------------------")
 ##================================================ Ising model:
 latticeSize = 10
 J = 1.0
-h = 1
+h = 0
 g = 0
-maxBondDim = 10
-prec = 1e-6
+maxBondDim = 40
+prec = 1e-8
 
 hamiltonian = MPS.IsingMPO(latticeSize,J,h,g)
-
+hamiltonian = MPS.HeisenbergMPO(latticeSize,1,1,1,1)
 mps = MPS.randomMPS(latticeSize,2,maxBondDim)
 
 MPS.makeCanonical(mps)
@@ -26,12 +26,7 @@ MPS.makeCanonical(mps)
 @time ground,E = MPS.DMRG(mps,hamiltonian,prec)
 
 println("E/N = ", E/(latticeSize-1))
-entropy=Array{Any}(latticeSize)
-for i=0:latticeSize-1
-entropy[i+1] = MPS.entropy(ground,i)
-end
-println(entropy)
-plot(entropy,show=true)
+
 @time exc,E = MPS.DMRG(mps,hamiltonian,prec,ground)
 
 println("\nOverlap: ",MPS.MPSoverlap(exc,ground))

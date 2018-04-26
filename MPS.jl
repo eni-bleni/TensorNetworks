@@ -205,12 +205,12 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,so[1]*so[2]*so[3])
             orthvector = orthvector/norm(orthvector)
-            proj = [zeros(orthvector') nullspace(orthvector)]'
+            proj = nullspace(orthvector)'
             Heff = proj * Heff * proj'
-            mpsguess = proj'*mpsguess
+            mpsguess = proj*mpsguess
         end
 
-        evals, evecs = eigs(Heff,nev=1,which=:SR,tol=prec,v0=mpsguess)
+        evals, evecs = eigs(Heff,nev=2,which=:SR,tol=prec,v0=mpsguess)
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
             return 0
@@ -341,7 +341,7 @@ function mpoSquaredExpectation(mps, mpo)
     F = Array{Complex64}(1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
-        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][2,5,6,-3]*mpo[i][3,6,7,-2]*conj(mps[i][1,7,-1])
+        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
     end
     return F[1,1,1,1]
 end
