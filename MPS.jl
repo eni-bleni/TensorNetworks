@@ -1,6 +1,13 @@
 module MPS
 using TensorOperations
 
+# define Pauli matrices
+sx = [0 1; 1 0]
+sy = [0 1im; -1im 0]
+sz = [1 0; 0 -1]
+si = [1 0; 0 1]
+s0 = [0 0; 0 0]
+
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
 
@@ -29,24 +36,27 @@ function LRcanonical(M,dir)
     return A,R,DB
 end
 
-# define Pauli matrices
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
+"""Returns an MPO of length L for with Operators O_i at position  j_i
 
-
-""" OneSiteMPO(L, j, op)
-returns a MPO of length L with identities at each site and operator 'op' at site j """
-function OneSiteMPO(L, j, op)
+```MpoFromOperators(ops,L)```"""
+function MpoFromOperators(ops,L)
     mpo = Array{Any}(L)
+    d = size(ops[1][1])[1]
     for i = 1:L
-        mpo[i] = reshape(si, 1,2,2,1)
+        mpo[i] = reshape(eye(d),1,d,d,1)
     end
-    mpo[j] = reshape(op, 1,2,2,1)
-
+    for i = 1:length(ops)
+        mpo[ops[i][2]] = reshape(ops[i][1],1,d,d,1)
+    end
     return mpo
+end
+
+"""Computes the expectation value of operators O_i sitting on site j_i
+
+```Correlator(ops,mps)```"""
+function Correlator(ops,mps)
+     MPO = MpoFromOperators(ops,length(mps))
+     return mpoExpectation(mps, MPO)
 end
 
 
@@ -414,6 +424,7 @@ function makeCanonical(mps,n=0)
 end
 
 
+
 """ UNFINISHED. Von Neumann entropy across link i
 ``` entropy(mps,i) -> S```"""
 function entropy(mps,i)
@@ -424,5 +435,6 @@ function entropy(mps,i)
     S = S.^2
     return -dot(S,log.(S))
 end
+
 
 end
