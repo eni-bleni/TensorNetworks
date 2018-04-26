@@ -20,7 +20,7 @@ maxBondDim = 40
 prec = 1e-8
 
 hamiltonian = MPS.IsingMPO(latticeSize,J,h,g)
-hamiltonian = MPS.HeisenbergMPO(latticeSize,1,1,1,1)
+# hamiltonian = MPS.HeisenbergMPO(latticeSize,1,1,1,1)
 mps = MPS.randomMPS(latticeSize,2,maxBondDim)
 
 MPS.makeCanonical(mps)
