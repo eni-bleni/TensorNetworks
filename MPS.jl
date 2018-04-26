@@ -173,9 +173,13 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
     println("E, var = ", E, ", ", var)
     count=1
     while var > prec && count<50
+        Eprev = E
         mps, E, var, canonicity = sweep(mps,mpo,HL,HR,CL,CR,prec,canonicity,orth)
         println("E, var = ", E, ", ", var)
         count=count+1
+        if abs((Eprev-E)/E) < prec
+            break
+        end
     end
 
     return mps, E
