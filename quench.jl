@@ -44,7 +44,7 @@ function isingQuench(i,time)
 
     if i==1
         return J*ZZ + h/2*(XI+2IX) + g/2*(ZI+2IZ)
-    elseif i==L-1
+    elseif i==latticeSize-1
         return J*ZZ + h/2*(2*XI+IX) + g/2*(2*ZI+IZ)
     else
         return J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)
@@ -62,7 +62,7 @@ function heisenbergQuench(i,time)
 
     if i==1
         return Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+2*IX)
-    elseif i==L-1
+    elseif i==latticeSize-1
         return Jx*XX + Jy*YY + Jz*ZZ + hx/2*(2*XI+IX)
     else
         return Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+IX)
