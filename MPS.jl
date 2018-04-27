@@ -67,7 +67,7 @@ function IsingMPO(L, J, h, g)
     mpo[1] = Array{Complex64}(1,2,2,3)
     mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz],2,2,3)
     mpo[L] = Array{Complex64}(3,2,2,1)
-    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,2,1])
+    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
         help = Array{Complex64}(3,2,2,3)
@@ -96,7 +96,7 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
     mpo[1] = Array{Complex64}(1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
     mpo[L] = Array{Complex64}(5,2,2,1)
-    mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,2,1])
+    mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,1,2])
 
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
