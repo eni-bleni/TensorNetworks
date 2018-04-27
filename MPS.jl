@@ -37,7 +37,8 @@ function LRcanonical(M,dir)
 end
 
 """Returns an MPO of length L for with Operators O_i at position  j_i
-"""
+
+```MpoFromOperators(ops,L)```"""
 function MpoFromOperators(ops,L)
     mpo = Array{Any}(L)
     d = size(ops[1][1])[1]
@@ -50,6 +51,9 @@ function MpoFromOperators(ops,L)
     return mpo
 end
 
+"""Computes the expectation value of operators O_i sitting on site j_i
+
+```Correlator(ops,mps)```"""
 function Correlator(ops,mps)
      MPO = MpoFromOperators(ops,length(mps))
      return mpoExpectation(mps, MPO)
@@ -179,9 +183,13 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
     println("E, var = ", E, ", ", var)
     count=1
     while var > prec && count<50
+        Eprev = E
         mps, E, var, canonicity = sweep(mps,mpo,HL,HR,CL,CR,prec,canonicity,orth)
         println("E, var = ", E, ", ", var)
         count=count+1
+        if abs((Eprev-E)/E) < prec
+            break
+        end
     end
 
     return mps, E
