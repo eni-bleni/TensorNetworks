@@ -19,6 +19,17 @@ function TwoSiteIsingHamiltonian(J,h,g)
     return H
 end
 
+
+""" returns the Ising parameters after every time evolution step """
+function evolveIsingParams(J0, h0, g0, time)
+    ### time evolution of all quench parameters
+    J = J0
+    h = h0 + exp(-3(time-2)^2)
+    g = g0
+
+    return J, h, g
+end
+
 function TwoSiteHeisenbergHamiltonian(Jx,Jy,Jz,hx)
     XX = kron(sx, sx)
     YY = kron(sy, sy)
@@ -29,12 +40,25 @@ function TwoSiteHeisenbergHamiltonian(Jx,Jy,Jz,hx)
     return H
 end
 
+""" returns the Heisenberg parameters after every time evolution step """
+function evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
+    ### time evolution of all quench parameters
+    Jx = Jx0
+    Jy = Jy0
+    Jz = Jz0
+    hx = hx0 + exp(-3(time-2)^2)
+
+    return Jx, Jy, Jz, hx
+end
+
+
 function truncate_svd(U, S, V, D)
     U = U[:, 1:D]
     S = S[1:D]
     V = V[1:D, :]
     return U, S, V
 end
+
 
 """ block_decimation(W, Tl, Tr, Dmax)
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
@@ -69,38 +93,8 @@ function block_decimation(W, Tl, Tr, Dmax)
     return Tl, Tr
 end
 
-function time_evolve(mps, block, total_time, steps, D, mpo=nothing)
-    ### block = hamiltonian
-    ### use negative imaginary total_time for imaginary time evolution
 
-    d = size(mps[1])[2]
-    L = length(mps)
-    W = expm(-1im*total_time*block/steps)
-    W = reshape(W, (d,d,d,d))
-    expect = Array{Any}(steps,2)
-
-    for counter = 1:steps
-        for i = 1:2:L-1 # odd sites
-            mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
-        end
-
-        for i = 2:2:L-1 # even sites
-            mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
-        end
-        if imag(total_time) != 0.0 # normalization in case of imaginary time evolution
-            MPS.makeCanonical(mps)
-        end
-
-        ## expectation values:
-        if mpo != nothing
-            expect[counter,:] = [counter*total_time/steps MPS.mpoExpectation(mps,mpo)]
-        end
-    end
-
-    return expect
-end
-
-function time_evolve_mpoham(mps, block, total_time, steps, D, mpo=nothing)
+function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, params, mpo=nothing)
     ### block = hamiltonian
     ### use negative imaginary total_time for imaginary time evolution
     stepsize = total_time/steps
@@ -108,16 +102,19 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, mpo=nothing)
     L = length(mps)
 
     expect = Array{Any}(steps,2)
+    entropy = Array{Any}(steps,2)
 
     for counter = 1:steps
+        time = counter*total_time/steps
+
         for i = 1:2:L-1 # odd sites
-            W = expm(-1im*stepsize*block(i,counter*total_time/steps))
+            W = expm(-1im*stepsize*block(i,time,params))
             W = reshape(W, (d,d,d,d))
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
         end
 
         for i = 2:2:L-1 # even sites
-            W = expm(-1im*stepsize*block(i,counter*total_time/steps))
+            W = expm(-1im*stepsize*block(i,time,params))
             W = reshape(W, (d,d,d,d))
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D)
         end
@@ -126,12 +123,29 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, mpo=nothing)
         end
 
         ## expectation values:
-        if mpo != nothing
-            expect[counter,:] = [counter*total_time/steps MPS.mpoExpectation(mps,mpo)]
+        if mpo != "nothing"
+            if mpo == "Ising"
+                J0, h0, g0 = params
+                J, h, g = evolveIsingParams(J0, h0, g0, time)
+                hamiltonian = MPS.IsingMPO(L, J, h, g)
+                expect[counter,:] = [time MPS.mpoExpectation(mps,hamiltonian)]
+            elseif mpo == "Heisenberg"
+                Jx0, Jy0, Jz0, hx0 = params
+                Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
+                hamiltonian = MPS.HeisenbergMPO(L, Jx, Jy, Jz, hx)
+                expect[counter,:] = [time MPS.mpoExpectation(mps,hamiltonian)]
+            else
+                expect[counter,:] = [time MPS.mpoExpectation(mps,mpo)]
+            end
+        end
+
+        ## entanglement entropy:
+        if entropy_cut > 0
+            entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
         end
     end
 
-    return expect
+    return expect, entropy
 end
 
 
