@@ -19,7 +19,7 @@ function MPOforHam(ham,L)
     U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
     V = reshape(diagm(sqrt.(S))*V',size(S)[1],d,d)
     mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2]]
-    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,3,4]]
+    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,4,3]]
     @tensor begin
         tmpEven[-1,-2,-3,-4] := V[-2,-1,1]*U[1,-4,-3];
         tmpOdd[-1,-2,-3,-4] := U[-1,1,-3]*V[-2,1,-4];
