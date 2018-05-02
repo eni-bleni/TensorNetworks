@@ -208,7 +208,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity,Heffs, orth=nothing)
             j=L+1-j
         end
 
-<<<<<<< HEAD
         # Heff = getHeff(mps,mpo,HL,HR,j)
         @tensor Heffs[j][-2,-1,-3,-5,-4,-6] = HL[j][-1,1,-4]*mpo[j][1,-2,-5,2]*HR[j][-3,2,-6]
 
@@ -217,12 +216,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity,Heffs, orth=nothing)
         d,D1,D2 = size(Heff)
         # D1,d,D2 = size(Heff)
 
-=======
-        Heff = getHeff(mps,mpo,HL,HR,j)
-        d,D1,D2 = size(Heff)
-        # D1,d,D2 = size(Heff)
-
->>>>>>> 9550a269525420d494c2b4699c711357462b42e7
         # Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
         Heff = reshape(Heff, d*D1*D2, d*D1*D2)        # = (d*D1*D2, d*D1*D2)
         szmps = size(mps[j])
