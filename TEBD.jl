@@ -72,6 +72,12 @@ function block_decimation(W, Tl, Tr, Dmax)
     ### output:
     ###     Tl, Tr after one time evolution step specified by W
 
+    stl = size(Tl)
+    str = size(Tr)
+    if length(stl)==4
+        Tl = reshape(permutedims(Tl, [1,3,2,4]), stl[1]*stl[3],stl[2],stl[4])
+        Tr = reshape(Tr, str[1],str[2],str[3]*str[4])
+    end
     D1l,d,D1r = size(Tl)
     D2l,d,D2r = size(Tr)
     # absorb time evolution gate W into Tl and Tr
@@ -88,6 +94,11 @@ function block_decimation(W, Tl, Tr, Dmax)
         U,S,V = truncate_svd(U,S,V,Dmax)
         Tl = reshape(U*diagm(sqrt.(S)), D1l,d,Dmax)
         Tr = reshape(diagm(sqrt.(S))*V, Dmax,d,D2r)
+    end
+
+    if length(stl)==4
+        Tl = permutedims(reshape(Tl, stl[1],stl[3],stl[2],min(D1,Dmax)), [1,3,2,4])
+        Tr = reshape(Tr, min(D1,Dmax),str[2],str[3],str[4])
     end
 
     return Tl, Tr
@@ -123,7 +134,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         end
 
         ## expectation values:
-        if mpo != "nothing"
+        if mpo != nothing
             if mpo == "Ising"
                 J0, h0, g0 = params
                 J, h, g = evolveIsingParams(J0, h0, g0, time)

@@ -6,7 +6,7 @@ println("\n---------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = 40
+maxBondDim = 20
 d = 2
 prec = 1e-8
 
@@ -22,9 +22,9 @@ Jz0 = 1.0
 hx0 = 1.0
 
 ## TEBD parameters:
-total_time = 10.0 # -im*total_time  for imag time evol
+total_time = -im*1.0    # -im*total_time  for imag time evol
 steps = 1000
-entropy_cut = 5
+entropy_cut = 0         # subsytem size for entanglement entopy; set to 0 to disregard
 
 # define Pauli matrices:
 sx = [0 1; 1 0]
@@ -80,26 +80,36 @@ MPS.makeCanonical(mps)
 ground,Eground = MPS.DMRG(mps,hamiltonian,prec)
 
 
+
 # magnetMPO = MPS.OneSiteMPO(latticeSize, Int(round(latticeSize/2)), [0 1; 1 0])
 # magnetization = TEBD.time_evolve(mps2, ham, total_time, steps, maxBondDim, magnetMPO)
-
 ## PLOTTING
 # plot(abs.(expect[:,1]), real.(expect[:,2]), show=true)
 
-
+## Ising evolution:
 init_params = (J0, h0, g0)
-@time energy, entropy = TEBD.time_evolve_mpoham(ground,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,"Ising")
+# @time energy, entropy = TEBD.time_evolve_mpoham(ground,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,"Ising")
+
+## thermal state MPO:
+IDmpo = MPS.IdentityMPO(latticeSize,d)
+@time energy, entropy = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params)
+rho = MPS.multiplyMPOs(IDmpo,IDmpo)
+
+## Heisenberg evolution:
 # init_params = (Jx0, Jy0, Jz0, hx0)
 # @time energy, entropy = TEBD.time_evolve_mpoham(ground,heisenbergQuench,total_time,steps,maxBondDim,entropy_cut,init_params,"Heisenberg")
 
-## PLOTTING
-figure(1)
-plot(abs.(energy[:,1]), real.(energy[:,2]))
-xlabel("time")
-ylabel("energy")
 
-figure(2)
-plot(abs.(entropy[:,1]), real.(entropy[:,2]))
-xlabel("time")
-ylabel("entanglement entropy")
-show()
+# ## PLOTTING
+# figure(1)
+# plot(abs.(energy[:,1]), real.(energy[:,2]))
+# xlabel("time")
+# ylabel("energy")
+#
+# figure(2)
+# plot(abs.(entropy[:,1]), real.(entropy[:,2]))
+# xlabel("time")
+# ylabel("entanglement entropy")
+# show()
+
+;
