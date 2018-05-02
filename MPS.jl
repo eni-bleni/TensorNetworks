@@ -8,6 +8,31 @@ sz = [1 0; 0 -1]
 si = [1 0; 0 1]
 s0 = [0 0; 0 0]
 
+"""
+Returns the MPO for a 2-site Hamiltonian
+"""
+function MPOforHam(ham,L)
+    d = size(ham)[1]
+    mpo = Array{Any}(L)
+    tmp = reshape(permutedims(ham,[1,3,2,4]),d*d,d*d)
+    U,S,V = svd(tmp)
+    U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
+    V = reshape(diagm(sqrt.(S))*V',size(S)[1],d,d)
+    mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2]]
+    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,3,4]]
+    @tensor begin
+        tmpEven[-1,-2,-3,-4] := V[-2,-1,1]*U[1,-4,-3];
+        tmpOdd[-1,-2,-3,-4] := U[-1,1,-3]*V[-2,1,-4];
+    end
+    for i=2:L-1
+        if iseven(i)
+            mpo[i] = tmpEven
+        else
+            mpo[i] = tmpOdd
+    end
+    return mpo
+end
+
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
 
@@ -36,9 +61,9 @@ function LRcanonical(M,dir)
     return A,R,DB
 end
 
-"""Returns an MPO of length L for with Operators O_i at position  j_i
+""" Returns an MPO of length L for with Operators O_i at position  j_i
 
-```MpoFromOperators(ops,L)```"""
+        ```MpoFromOperators(ops,L) -> mpo```"""
 function MpoFromOperators(ops,L)
     mpo = Array{Any}(L)
     d = size(ops[1][1])[1]
@@ -51,12 +76,13 @@ function MpoFromOperators(ops,L)
     return mpo
 end
 
-"""Computes the expectation value of operators O_i sitting on site j_i
+""" Computes the expectation value of operators O_i sitting on site j_i
 
-```Correlator(ops,mps)```"""
+```Correlator(ops,mps) -> corr```"""
 function Correlator(ops,mps)
      MPO = MpoFromOperators(ops,length(mps))
-     return mpoExpectation(mps, MPO)
+     corr = mpoExpectation(mps, MPO)
+     return corr
 end
 
 
@@ -307,6 +333,7 @@ function updateHeff(mps,mpo,HL,HR,i,dir)
         @tensor HR[i-1][-1,-2,-3] := conj(mps[i][-1,4,1])*mpo[i][-2,4,5,2]*mps[i][-3,5,3]*HR[i][1,2,3]
     end
 end
+
 function updateCLR(mps,CL,CR,i,dir,orth=nothing)
     if orth==nothing
         return
