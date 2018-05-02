@@ -50,6 +50,7 @@ function block_decimation(W, Tl, Tr, Dmax)
 
     D1l,d,D1r = size(Tl)
     D2l,d,D2r = size(Tr)
+
     # absorb time evolution gate W into Tl and Tr
     @tensor theta[-1,-2,-3,-4] := Tl[-1,2,3]*W[2,4,-2,-3]*Tr[3,4,-4] # = (D1l,d,d,D2r)
     theta = reshape(theta, D1l*d,d*D2r)

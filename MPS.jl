@@ -132,7 +132,7 @@ function randomMPS(L,d,D)
     ### d: physical dim
     ### D: bond dim
 
-    mps = Array{Any}(L)
+    mps = Array{Array{Complex{Float64},3}}(L)
     ran = rand(d,D)+1im*rand(d,D)
     ran = ran/norm(ran)
     mps[1] = reshape(ran,1,d,D)
@@ -171,11 +171,13 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
         return 0
     end
 
-    HL = Array{Any}(L)
-    HR = Array{Any}(L)
-    CL = Array{Any}(L)
-    CR = Array{Any}(L)
+    HL = Array{Array{Complex{Float64},3}}(L)
+    HR = Array{Array{Complex{Float64},3}}(L)
+    CL = Array{Array{Complex{Float64},2}}(L)
+    CR = Array{Array{Complex{Float64},2}}(L)
+    Heffs = Array{Array{Complex{Float64},6}}(L)
     initializeHLR(mps,mpo,HL,HR)
+    initializeHeff(mps,mpo,HL,HR,Heffs)
     initializeCLR(mps,CL,CR,orth)
 
     E, H2 = real(mpoExpectation(mps,mpo)), real(mpoSquaredExpectation(mps,mpo))
@@ -184,7 +186,7 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
     count=1
     while var > prec && count<50
         Eprev = E
-        mps, E, var, canonicity = sweep(mps,mpo,HL,HR,CL,CR,prec,canonicity,orth)
+        mps, E, var, canonicity = sweep(mps,mpo,HL,HR,CL,CR,prec,canonicity,Heffs,orth)
         println("E, var = ", E, ", ", var)
         count=count+1
         if abs((Eprev-E)/E) < prec
@@ -196,7 +198,7 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
 end
 
 """ sweeps from left to right in the DMRG algorithm """
-function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
+function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity,Heffs, orth=nothing)
     ### minimizes E by diagonalizing site by site in the mps from left to right: j=1-->L-1
     ### the resulting sites are left-canonicalized
     L = length(mps)
@@ -206,10 +208,15 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             j=L+1-j
         end
 
-        Heff = getHeff(mps,mpo,HL,HR,j)
-        D1,d,D2 = size(Heff)
+        # Heff = getHeff(mps,mpo,HL,HR,j)
+        @tensor Heffs[j][-2,-1,-3,-5,-4,-6] = HL[j][-1,1,-4]*mpo[j][1,-2,-5,2]*HR[j][-3,2,-6]
 
-        Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
+        Heff=Heffs[j]
+        # println(typeof(Heff))
+        d,D1,D2 = size(Heff)
+        # D1,d,D2 = size(Heff)
+
+        # Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
         Heff = reshape(Heff, d*D1*D2, d*D1*D2)        # = (d*D1*D2, d*D1*D2)
         szmps = size(mps[j])
         mpsguess = reshape(permutedims(mps[j],[2,1,3]),szmps[1]*szmps[2]*szmps[3])
@@ -238,7 +245,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         end
 
         Mj = reshape(evec_min, 2,D1,D2) # = (d,D1,D2)
-        Mj = permutedims(Mj, [2,1,3])   # = (D1,d,D2)
+        Mj = PermutedDimsArray(Mj, [2,1,3])   # = (D1,d,D2)
         Aj,R = LRcanonical(Mj,-canonicity)
         mps[j] = Aj
 
@@ -262,6 +269,13 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
     end
     var = H2 - E^2
     return mps, E, var, -canonicity
+end
+
+function initializeHeff(mps,mpo,HL,HR,Heffs)
+    L = length(mps)
+    for j=1:L
+        Heffs[j] = getHeff(mps,mpo,HL,HR,j)
+    end
 end
 
 function initializeHLR(mps,mpo,HL,HR)
@@ -322,7 +336,7 @@ end
 
 function getHeff(mps,mpo,HL,HR,i)
     L=length(mps)
-    @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
+    @tensor Heff[-2,-1,-3,-5,-4,-6] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
     return Heff
 end
 
@@ -409,6 +423,12 @@ end
     ``` makeCanonical(mps,n=0)```"""
 function makeCanonical(mps,n=0)
     L = length(mps)
+    for i = 1:L-1
+        mps[i],R,DB = LRcanonical(mps[i],-1);
+        if i<L
+            @tensor mps[i+1][-1,-2,-3] := R[-1,1]*mps[i+1][1,-2,-3];
+        end
+    end
     for i = 1:n-1
         mps[i],R,DB = LRcanonical(mps[i],-1);
         if i<L
@@ -424,7 +444,6 @@ function makeCanonical(mps,n=0)
 end
 
 
-
 """ UNFINISHED. Von Neumann entropy across link i
 ``` entropy(mps,i) -> S```"""
 function entropy(mps,i)
@@ -435,6 +454,5 @@ function entropy(mps,i)
     S = S.^2
     return -dot(S,log.(S))
 end
-
 
 end
