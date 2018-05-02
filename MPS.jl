@@ -207,9 +207,10 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         end
 
         Heff = getHeff(mps,mpo,HL,HR,j)
-        D1,d,D2 = size(Heff)
+        d,D1,D2 = size(Heff)
+        # D1,d,D2 = size(Heff)
 
-        Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
+        # Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
         Heff = reshape(Heff, d*D1*D2, d*D1*D2)        # = (d*D1*D2, d*D1*D2)
         szmps = size(mps[j])
         mpsguess = reshape(permutedims(mps[j],[2,1,3]),szmps[1]*szmps[2]*szmps[3])
@@ -322,7 +323,7 @@ end
 
 function getHeff(mps,mpo,HL,HR,i)
     L=length(mps)
-    @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
+    @tensor Heff[-2,-1,-3,-5,-4,-6] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
     return Heff
 end
 
