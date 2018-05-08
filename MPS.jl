@@ -60,6 +60,38 @@ function Correlator(ops,mps)
 end
 
 
+"""Computes the correlation lenght for any mps by brute force calculation of
+   <O_1 O_2> - <O_1>*<O_2> for distances m=1:L and physical dimension d
+
+```correlation_length(mps, d) --> corr, xi, ind_max, a, b```"""
+function correlation_length(mps, d)
+    L = length(mps)
+    corr = Array{Any}(L,2)
+    ind_max = 1
+
+    for m = 1:L # calculation of correlation function in dpendence of distance m
+        ops_list = [[randn(d,d),1],[randn(d,d),m]]
+        corr[m,1] = m
+        corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+    end
+
+    for m = 1:L # calculation of maximal index up to which corr is above machine precision (for fit interval)
+        if abs(corr[m,2]) > 1e-14
+            ind_max = m
+        else
+            break
+        end
+    end
+    println("ind_max: ", ind_max)
+
+    a, b = linreg(corr[1:ind_max,1], log.(abs.(corr[1:ind_max,2])))
+    xi = -1/b
+    println("xi = ", xi)
+
+    return corr, xi, ind_max, a, b
+end
+
+
 """ Returns the Identity chain as an MPO
 
 ```IdentityMPO(lattice sites, phys dims)```"""

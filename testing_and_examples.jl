@@ -2,17 +2,17 @@ using MPS
 using TEBD
 # using Plots
 using PyPlot
-println("------------------------------------")
+println("\n---------------------------------------")
 
 
 ## parameters for the spin chain:
-latticeSize = 50
-maxBondDim = 20
+latticeSize = 100
+maxBondDim = 100
 d = 2
 prec = 1e-8
 
 ## Ising parameters:
-J = 1
+J = 1.0
 h = 1.0
 g = 0.0
 
@@ -38,18 +38,18 @@ s0 = [0 0; 0 0]
 ################################################################################
 ##                                  DMRG
 ################################################################################
-println("...performing ground state DMRG...")
-
-hamiltonian = MPS.IsingMPO(latticeSize, J, h, g)
-# hamiltonian = MPS.HeisenbergMPO(latticeSize, Jx, Jy, Jz, hx)
-
-mps = MPS.randomMPS(latticeSize,d,maxBondDim)
-MPS.makeCanonical(mps)
-
-@time ground,E0 = MPS.DMRG(mps,hamiltonian,prec)
-println("E/N = ", E0/(latticeSize-1))
-
-
+# println("...performing ground state DMRG...")
+#
+# hamiltonian = MPS.IsingMPO(latticeSize, J, h, g)
+# # hamiltonian = MPS.HeisenbergMPO(latticeSize, Jx, Jy, Jz, hx)
+#
+# mps = MPS.randomMPS(latticeSize,d,maxBondDim)
+# MPS.makeCanonical(mps)
+#
+# @time ground,E0 = MPS.DMRG(mps,hamiltonian,prec)
+# println("E/N = ", E0/(latticeSize-1))
+#
+#
 # println("\n...performing excited state DMRG...")
 # @time exc,E = MPS.DMRG(mps,hamiltonian,prec,ground)
 # println("Overlap: ",MPS.MPSoverlap(exc,ground))
@@ -58,32 +58,50 @@ println("E/N = ", E0/(latticeSize-1))
 ################################################################################
 ##                           Entanglement Entropy
 ################################################################################
-println("\n...entanglement entropy...")
+# println("\n...entanglement entropy...")
+#
+# entropy = Array{Any}(latticeSize,2)
+# for i = 0:latticeSize-1
+#     entropy[i+1,1] = i+1 # subsystem size
+#     entropy[i+1,2] = MPS.entropy(ground,i)
+# end
+# ind_min = 5
+# ind_max = Int(round(0.3*latticeSize))
+# fit_interval = log.(entropy[ind_min:ind_max,1])
+# a,b = linreg(fit_interval, entropy[ind_min:ind_max,2])
+# c = 6*b
+# println("central charge (if critical): ", c)
+#
+# figure(1)
+# plot(entropy[:,1], entropy[:,2])
+# xlabel("\$L\$ (subsystem size)")
+# ylabel("\$S_L\$ (entanglement entropy)")
+#
+# figure(2)
+# plot(fit_interval, a+b*fit_interval)
+# plot(fit_interval, entropy[ind_min:ind_max,2])
+# xlabel("\$\\ln(L)\$")
+# ylabel("\$S_L\$")
+# # text(fit_interval[end]*0.6, entropy[ind_max,2]*0.99, "c = %1.2f" %c)
 
-entropy = Array{Any}(latticeSize,2)
-for i = 0:latticeSize-1
-    entropy[i+1,1] = i+1 # subsystem size
-    entropy[i+1,2] = MPS.entropy(ground,i)
-end
-ind_min = 5
-ind_max = Int(round(0.3*latticeSize))
-fit_interval = log.(entropy[ind_min:ind_max,1])
-a,b = linreg(fit_interval, entropy[ind_min:ind_max,2])
-c = 6*b
-println("central charge (if critical): ", c)
 
-figure(1)
-plot(entropy[:,1], entropy[:,2])
-xlabel("\$L\$ (subsystem size)")
-ylabel("\$S_L\$ (entanglement entropy)")
+################################################################################
+##                           Correlation Length
+################################################################################
+println("\n...correlation length...")
 
-figure(2)
-plot(fit_interval, a+b*fit_interval)
-plot(fit_interval, entropy[ind_min:ind_max,2])
-xlabel("\$\\ln(L)\$")
-ylabel("\$S_L\$")
-# text(fit_interval[end]*0.6, entropy[ind_max,2]*0.99, "c = %1.2f" %c)
-show()
+mps = MPS.randomMPS(latticeSize,d,maxBondDim)
+MPS.makeCanonical(mps)
+
+corr, xi, ind_max, a, b = MPS.correlation_length(mps, d)
+
+figure(3)
+semilogy(corr[1:end,1], abs.(corr[1:end,2]))
+plot(corr[1:ind_max,1], exp.(a+b*corr[1:ind_max,1]))
+xlabel("distance \$m\$")
+ylabel("\$\\vert\\langle O_1^{(1)}O_2^{(m)}\\rangle - \\langle O_1^{(1)}\\rangle\\langle O_2^{(m)}\\rangle\\vert\$")
+
+
 
 ################################################################################
 ##                                  TEBD
@@ -112,4 +130,5 @@ show()
 # ## PLOTTING
 # plot(abs.(expect[:,1]), real.(expect[:,2]), show=true)
 
+show()
 ;
