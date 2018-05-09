@@ -1,6 +1,6 @@
 module MPS
 using TensorOperations
-
+using LinearMaps
 # define Pauli matrices
 sx = [0 1; 1 0]
 sy = [0 1im; -1im 0]
@@ -18,8 +18,8 @@ function MPOforHam(ham,L)
     U,S,V = svd(tmp)
     U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
     V = reshape(diagm(sqrt.(S))*V',size(S)[1],d,d)
-    mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2]]
-    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,4,3]]
+    mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2])
+    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,4,3])
     @tensor begin
         tmpEven[-1,-2,-3,-4] := V[-2,-1,1]*U[1,-4,-3];
         tmpOdd[-1,-2,-3,-4] := U[-1,1,-3]*V[-2,1,-4];
@@ -29,6 +29,7 @@ function MPOforHam(ham,L)
             mpo[i] = tmpEven
         else
             mpo[i] = tmpOdd
+        end
     end
     return mpo
 end
@@ -232,25 +233,22 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             j=L+1-j
         end
 
-        Heff = getHeff(mps,mpo,HL,HR,j)
-        D1,d,D2 = size(Heff)
-
-        Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
-        Heff = reshape(Heff, d*D1*D2, d*D1*D2)        # = (d*D1*D2, d*D1*D2)
         szmps = size(mps[j])
-        mpsguess = reshape(permutedims(mps[j],[2,1,3]),szmps[1]*szmps[2]*szmps[3])
+        mpsguess = reshape(mps[j],prod(szmps))
+        HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
+        hefflin = LinearMap{Complex128}(HeffFun, prod(szmps),ishermitian=true)
 
         if orth!=nothing
-            @tensor orthTensor[-2,-1,-3] := CL[j][1,-1]*CR[j][2,-3]*conj(orth[j][1,-2,2])
+            @tensor orthTensor[:] := CL[j][1,-1]*CR[j][2,-3]*conj(orth[j][1,-2,2])
             so = size(orthTensor)
-            orthvector = reshape(orthTensor,1,so[1]*so[2]*so[3])
+            orthvector = reshape(orthTensor,1,prod(so))
             orthvector = orthvector/norm(orthvector)
             proj = nullspace(orthvector)'
-            Heff = proj * Heff * proj'
+            hefflin = proj * hefflin * proj'
             mpsguess = proj*mpsguess
         end
 
-        evals, evecs = eigs(Heff,nev=2,which=:SR,tol=prec,v0=mpsguess)
+        evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
             return 0
@@ -262,9 +260,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         if orth!=nothing
             evec_min = proj'*evec_min
         end
-
-        Mj = reshape(evec_min, 2,D1,D2) # = (d,D1,D2)
-        Mj = permutedims(Mj, [2,1,3])   # = (D1,d,D2)
+        Mj = reshape(evec_min,szmps)
         Aj,R = LRcanonical(Mj,-canonicity)
         mps[j] = Aj
 
@@ -351,6 +347,11 @@ function getHeff(mps,mpo,HL,HR,i)
     L=length(mps)
     @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
     return Heff
+end
+
+function HeffMult(tensor,mpo,HL,HR)
+    @tensor temp[:] := HL[-1,1,4]*(mpo[1,-2,5,2]*tensor[4,5,6])*HR[-3,2,6]
+    return temp
 end
 
 """ returns the mpo expectation value <mps|mpo|mps>
