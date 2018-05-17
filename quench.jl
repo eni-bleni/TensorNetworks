@@ -24,7 +24,7 @@ hx0 = 1.0
 ## TEBD parameters:
 total_time = -im*10.0    # -im*total_time  for imag time evol
 steps = 1000
-entropy_cut = 4         # subsytem size for entanglement entopy; set to 0 to disregard
+entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 # define Pauli matrices:
 sx = [0 1; 1 0]
@@ -55,6 +55,7 @@ function isingQuench(i, time, params)
 end
 
 function heisenbergQuench(i,time, params)
+    Jx0, Jy0, Jz0, hx0 = params
     XX = kron(sx, sx)
     YY = kron(sy, sy)
     ZZ = kron(sz, sz)
@@ -79,7 +80,7 @@ mps = MPS.randomMPS(latticeSize,d,maxBondDim)
 MPS.makeCanonical(mps)
 ground,Eground = MPS.DMRG(mps,hamiltonian,prec)
 mps_evol = mps # mps used in TEBD (e.g. ground in quench or mps for imag time evolution)
-
+ETH = (false,0,0) # dummys: no ETH calcs here
 
 # magnetMPO = MPS.OneSiteMPO(latticeSize, Int(round(latticeSize/2)), [0 1; 1 0])
 # magnetization = TEBD.time_evolve(mps2, ham, total_time, steps, maxBondDim, magnetMPO)
@@ -91,14 +92,14 @@ mps_evol = mps # mps used in TEBD (e.g. ground in quench or mps for imag time ev
 ## thermal state MPO:
 init_params = (J0, h0, g0)
 IDmpo = MPS.IdentityMPO(latticeSize,d)
-@time TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params)
+@time TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
 rho = MPS.multiplyMPOs(IDmpo,IDmpo)
 
 
 ## Ising evolution:
 # init_params = (J0, h0, g0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,"Ising")
+# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Ising")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -106,7 +107,7 @@ rho = MPS.multiplyMPOs(IDmpo,IDmpo)
 ## Heisenberg evolution:
 # init_params = (Jx0, Jy0, Jz0, hx0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time,steps,maxBondDim,entropy_cut,init_params,"Heisenberg")
+# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Heisenberg")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 

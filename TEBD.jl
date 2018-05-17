@@ -126,10 +126,11 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
 end
 
 
-function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, params, mpo=nothing)
+function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, params, eth, mpo=nothing)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
+	### eth = (true,E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
     stepsize = total_time/steps
     d = size(mps[1])[2]
     L = length(mps)
@@ -191,10 +192,6 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
             mps[1],R,DB = MPS.LRcanonical(mps[1],1) # rightcanonicalize at left end
         end
 
-        # if imag(total_time) != 0.0 # normalization in case of imaginary time evolution
-        #     MPS.makeCanonical(mps)
-        # end
-
         ## expectation values:
         if mpo != nothing
             if mpo == "Ising"
@@ -216,6 +213,16 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         if entropy_cut > 0
             entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
         end
+
+		## ETH calculations:
+		if eth[1] == true
+			E1, hamiltonian = real(eth[2]), eth[3]
+			rho = MPS.multiplyMPOs(mps,mps)
+			E_thermal = real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))
+			if E_thermal <= E1
+				return E_thermal, real(time*1im) # im*time = beta/2
+			end
+		end
     end
 
     return expect, entropy

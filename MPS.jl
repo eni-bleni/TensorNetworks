@@ -388,6 +388,18 @@ function multiplyMPOs(mpo1,mpo2)
 end
 
 
+function traceMPO(mpo)
+    L = length(mpo)
+    F = Array{Complex64}(1,1)
+    F[1,1] = 1
+    for i = 1:L
+        @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+    end
+
+    return F[1,1]
+end
+
+
 """ returns the mpo expectation value <mps|mpo|mps>
 
     ```mpoExpectation(mps,mpo)```"""
