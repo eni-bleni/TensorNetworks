@@ -87,6 +87,53 @@ function Correlator(ops,mps)
 end
 
 
+"""Computes the correlation lenght for any mps by brute force calculation of
+   <O_1 O_2> - <O_1>*<O_2> for distances m=1:L and physical dimension d
+
+```correlation_length(mps, d) --> corr, xi, ind_max, a, b```"""
+function correlation_length(mps, d)
+    L = length(mps)
+    corr = Array{Any}(L,2)
+    ind_max = 1
+
+    for m = 1:L # calculation of correlation function in dpendence of distance m
+        ops_list = [[randn(d,d),1],[randn(d,d),m]]
+        corr[m,1] = m
+        corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+    end
+
+    for m = 1:L # calculation of maximal index up to which corr is above machine precision (for fit interval)
+        if abs(corr[m,2]) > 1e-14
+            ind_max = m
+        else
+            break
+        end
+    end
+    println("ind_max: ", ind_max)
+
+    a, b = linreg(corr[1:ind_max,1], log.(abs.(corr[1:ind_max,2])))
+    xi = -1/b
+    println("xi = ", xi)
+
+    return corr, xi, ind_max, a, b
+end
+
+
+""" Returns the Identity chain as an MPO
+
+```IdentityMPO(lattice sites, phys dims)```"""
+function IdentityMPO(L, d)
+    # mpo = Array{Array{Complex{Float32},4}}(L)
+    mpo = Array{Any}(L)
+    for i = 1:L
+        mpo[i] = Array{Complex64}(1,d,d,1)
+        mpo[i][1,:,:,1] = eye(d)
+    end
+
+    return mpo
+end
+
+
 """ Returns the Hamiltonian for the Ising model in transverse field as an MPO
 
 ```IsingMPO(lattice sites,J,transverse,longitudinal)```"""
@@ -349,6 +396,32 @@ function getHeff(mps,mpo,HL,HR,i)
     return Heff
 end
 
+function multiplyMPOs(mpo1,mpo2)
+    L = length(mpo1)
+    mpo = Array{Any}(L)
+
+    for j=1:L
+        @tensor temp[:] := mpo1[j][-1,-3,1,-5] * conj(mpo2[j][-2,1,-4,-6])
+        s=size(temp)
+        mpo[j] = reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6])
+    end
+
+    return mpo
+end
+
+
+function traceMPO(mpo)
+    L = length(mpo)
+    F = Array{Complex64}(1,1)
+    F[1,1] = 1
+    for i = 1:L
+        @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+    end
+
+    return F[1,1]
+end
+
+
 function HeffMult(tensor,mpo,HL,HR)
     @tensor temp[:] := HL[-1,1,4]*(mpo[1,-2,5,2]*tensor[4,5,6])*HR[-3,2,6]
     return temp
@@ -437,6 +510,17 @@ end
     ``` makeCanonical(mps,n=0)```"""
 function makeCanonical(mps,n=0)
     L = length(mps)
+    mpo_trafo = 0
+
+    if length(size(mps[1])) == 4 # make mps out of mpo
+        mpo_trafo = 1
+        smps = Array{Any}(L)
+        for i = 1:L
+            smps[i] = size(mps[i])
+            mps[i] = reshape(mps[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
+        end
+    end
+
     for i = 1:n-1
         mps[i],R,DB = LRcanonical(mps[i],-1);
         if i<L
@@ -447,6 +531,12 @@ function makeCanonical(mps,n=0)
         mps[i],R,DB = LRcanonical(mps[i],1);
         if i>1
             @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
+        end
+    end
+
+    if mpo_trafo == 1 # transform mps back into mpo
+        for i = 1:L
+            mps[i] = reshape(mps[i], smps[i][1],smps[i][2],smps[i][3],smps[i][4])
         end
     end
 end
