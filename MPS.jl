@@ -137,21 +137,21 @@ end
 """ Returns the Hamiltonian for the Ising model in transverse field as an MPO
 
 ```IsingMPO(lattice sites,J,transverse,longitudinal)```"""
-function IsingMPO(L, J, h, g)
+function IsingMPO(L, J, h, g, shift=0)
     ### input:   L: lenght of mpo = number of sites/tensors; J,h,g: Ising Hamiltonian params
     ### constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
     ### first site: (i,j,b); last site: (a,i,j)
     mpo = Array{Any}(L)
     mpo[1] = Array{Complex128}(1,2,2,3)
-    mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz],2,2,3)
+    mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz+shift*si/L],2,2,3)
     mpo[L] = Array{Complex128}(3,2,2,1)
-    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,1,2])
+    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
         help = Array{Complex128}(3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
         help[1,:,:,2] = J*sz
-        help[1,:,:,3] = h*sx+g*sz
+        help[1,:,:,3] = h*sx+g*sz+shift*si/L
         help[2,:,:,1] = help[2,:,:,2] = help[3,:,:,1] = help[3,:,:,2] = s0
         help[2,:,:,3] = sz
         mpo[i] = help
@@ -326,7 +326,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
 
     ## Energies:
     E, H2 = mpoExpectation(mps,mpo), mpoSquaredExpectation(mps,mpo)
-    if (E ≈ real(E))  &  (H2 ≈ real(H2))
+    if isapprox(E,real(E); atol = prec)  &&  isapprox(H2,real(H2); atol=prec)
         E, H2 = real(E), real(H2)
     else
         println("ERROR: no real energies")
@@ -411,12 +411,15 @@ function getHeff(mps,mpo,HL,HR,i)
     return Heff
 end
 
-function multiplyMPOs(mpo1,mpo2)
+function multiplyMPOs(mpo1,mpo2; c=true)
     L = length(mpo1)
     mpo = Array{Any}(L)
-
     for j=1:L
-        @tensor temp[:] := mpo1[j][-1,-3,1,-5] * conj(mpo2[j][-2,1,-4,-6])
+        if c
+            @tensor temp[:] := mpo1[j][-1,-3,1,-5] * conj(mpo2[j][-2,-4,1,-6])
+        else
+            @tensor temp[:] := mpo1[j][-1,-3,1,-5] * mpo2[j][-2,1,-4,-6]
+        end
         s=size(temp)
         mpo[j] = reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6])
     end
