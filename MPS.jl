@@ -1,12 +1,38 @@
 module MPS
 using TensorOperations
-
+using LinearMaps
 # define Pauli matrices
 sx = [0 1; 1 0]
 sy = [0 1im; -1im 0]
 sz = [1 0; 0 -1]
 si = [1 0; 0 1]
 s0 = [0 0; 0 0]
+
+"""
+Returns the MPO for a 2-site Hamiltonian
+"""
+function MPOforHam(ham,L)
+    d = size(ham)[1]
+    mpo = Array{Any}(L)
+    tmp = reshape(permutedims(ham,[1,3,2,4]),d*d,d*d)
+    U,S,V = svd(tmp)
+    U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
+    V = reshape(diagm(sqrt.(S))*V',size(S)[1],d,d)
+    mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2])
+    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,4,3])
+    @tensor begin
+        tmpEven[-1,-2,-3,-4] := V[-2,-1,1]*U[1,-4,-3];
+        tmpOdd[-1,-2,-3,-4] := U[-1,1,-3]*V[-2,1,-4];
+    end
+    for i=2:L-1
+        if iseven(i)
+            mpo[i] = tmpEven
+        else
+            mpo[i] = tmpOdd
+        end
+    end
+    return mpo
+end
 
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
@@ -36,9 +62,9 @@ function LRcanonical(M,dir)
     return A,R,DB
 end
 
-"""Returns an MPO of length L for with Operators O_i at position  j_i
+""" Returns an MPO of length L for with Operators O_i at position  j_i
 
-```MpoFromOperators(ops,L)```"""
+        ```MpoFromOperators(ops,L) -> mpo```"""
 function MpoFromOperators(ops,L)
     mpo = Array{Any}(L)
     d = size(ops[1][1])[1]
@@ -51,12 +77,13 @@ function MpoFromOperators(ops,L)
     return mpo
 end
 
-"""Computes the expectation value of operators O_i sitting on site j_i
+""" Computes the expectation value of operators O_i sitting on site j_i
 
-```Correlator(ops,mps)```"""
+```Correlator(ops,mps) -> corr```"""
 function Correlator(ops,mps)
      MPO = MpoFromOperators(ops,length(mps))
-     return mpoExpectation(mps, MPO)
+     corr = mpoExpectation(mps, MPO)
+     return corr
 end
 
 
@@ -253,25 +280,22 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             j=L+1-j
         end
 
-        Heff = getHeff(mps,mpo,HL,HR,j)
-        D1,d,D2 = size(Heff)
-
-        Heff = permutedims(Heff, [2,1,3,5,4,6])       # = (d,D1,D2, d,D1,D2)
-        Heff = reshape(Heff, d*D1*D2, d*D1*D2)        # = (d*D1*D2, d*D1*D2)
         szmps = size(mps[j])
-        mpsguess = reshape(permutedims(mps[j],[2,1,3]),szmps[1]*szmps[2]*szmps[3])
+        mpsguess = reshape(mps[j],prod(szmps))
+        HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
+        hefflin = LinearMap{Complex128}(HeffFun, prod(szmps),ishermitian=true)
 
         if orth!=nothing
-            @tensor orthTensor[-2,-1,-3] := CL[j][1,-1]*CR[j][2,-3]*conj(orth[j][1,-2,2])
+            @tensor orthTensor[:] := CL[j][1,-1]*CR[j][2,-3]*conj(orth[j][1,-2,2])
             so = size(orthTensor)
-            orthvector = reshape(orthTensor,1,so[1]*so[2]*so[3])
+            orthvector = reshape(orthTensor,1,prod(so))
             orthvector = orthvector/norm(orthvector)
             proj = nullspace(orthvector)'
-            Heff = proj * Heff * proj'
+            hefflin = proj * hefflin * proj'
             mpsguess = proj*mpsguess
         end
 
-        evals, evecs = eigs(Heff,nev=2,which=:SR,tol=prec,v0=mpsguess)
+        evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
             return 0
@@ -283,9 +307,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         if orth!=nothing
             evec_min = proj'*evec_min
         end
-
-        Mj = reshape(evec_min, 2,D1,D2) # = (d,D1,D2)
-        Mj = permutedims(Mj, [2,1,3])   # = (D1,d,D2)
+        Mj = reshape(evec_min,szmps)
         Aj,R = LRcanonical(Mj,-canonicity)
         mps[j] = Aj
 
@@ -354,6 +376,7 @@ function updateHeff(mps,mpo,HL,HR,i,dir)
         @tensor HR[i-1][-1,-2,-3] := conj(mps[i][-1,4,1])*mpo[i][-2,4,5,2]*mps[i][-3,5,3]*HR[i][1,2,3]
     end
 end
+
 function updateCLR(mps,CL,CR,i,dir,orth=nothing)
     if orth==nothing
         return
@@ -372,7 +395,6 @@ function getHeff(mps,mpo,HL,HR,i)
     @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i][1,-2,-5,2]*HR[i][-3,2,-6]
     return Heff
 end
-
 
 function multiplyMPOs(mpo1,mpo2)
     L = length(mpo1)
@@ -399,6 +421,11 @@ function traceMPO(mpo)
     return F[1,1]
 end
 
+
+function HeffMult(tensor,mpo,HL,HR)
+    @tensor temp[:] := HL[-1,1,4]*(mpo[1,-2,5,2]*tensor[4,5,6])*HR[-3,2,6]
+    return temp
+end
 
 """ returns the mpo expectation value <mps|mpo|mps>
 

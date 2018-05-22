@@ -52,3 +52,5 @@ first site: (1,i,j,b); last site: (a,i,j,1)
 6. Check subsystem ETH for excited states.
 
 7. Generalize to more Hamiltonians.
+
+8. Improve efficiency of DMRG: The use of Heff as a (large) matrix in eigs can (and should) be improved by defining a linear map directly in terms of HL*MPO*HR. The packages https://github.com/Jutho/LinearMaps.jl or https://github.com/JuliaSmoothOptimizers/LinearOperators.jl can be used to construct a function that can be used in eigs.
