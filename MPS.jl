@@ -126,7 +126,7 @@ function IdentityMPO(L, d)
     # mpo = Array{Array{Complex{Float32},4}}(L)
     mpo = Array{Any}(L)
     for i = 1:L
-        mpo[i] = Array{Complex64}(1,d,d,1)
+        mpo[i] = Array{Complex128}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
 
@@ -142,13 +142,13 @@ function IsingMPO(L, J, h, g)
     ### constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
     ### first site: (i,j,b); last site: (a,i,j)
     mpo = Array{Any}(L)
-    mpo[1] = Array{Complex64}(1,2,2,3)
+    mpo[1] = Array{Complex128}(1,2,2,3)
     mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz],2,2,3)
-    mpo[L] = Array{Complex64}(3,2,2,1)
+    mpo[L] = Array{Complex128}(3,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex64}(3,2,2,3)
+        help = Array{Complex128}(3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
         help[1,:,:,2] = J*sz
         help[1,:,:,3] = h*sx+g*sz
@@ -171,14 +171,14 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
     ###                          first site: (i,j,b); last site: (a,i,j)
 
     mpo = Array{Any}(L)
-    mpo[1] = Array{Complex64}(1,2,2,5)
+    mpo[1] = Array{Complex128}(1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
-    mpo[L] = Array{Complex64}(5,2,2,1)
+    mpo[L] = Array{Complex128}(5,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,1,2])
 
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex64}(5,2,2,5)
+        help = Array{Complex128}(5,2,2,5)
         help[1,:,:,1] = help[5,:,:,5] = si
         help[1,:,:,2] = Jx*sx
         help[1,:,:,3] = Jy*sy
@@ -225,13 +225,13 @@ end
     The state will be orthogonal to orth (optional argument).
 
     ```DMRG(mps,hamiltonian mpo,precision,orth=nothing) -> mps, energy```"""
-function DMRG(mps_input, mpo, prec, orth=nothing)
+function DMRG(mps_input, mpo, prec, orth=[])
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
 
     mps = 1*mps_input  # ATTENTION: necessary trick to keep mps local variable
     L = length(mps)
-
+    Lorth = length(orth)
     if !(MPSnorm(mps) ≈ 1) | L != length(mpo)
         println("ERROR in DMRG: non-normalized MPS as input or wrong length")
         return 0
@@ -247,8 +247,8 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
 
     HL = Array{Any}(L)
     HR = Array{Any}(L)
-    CL = Array{Any}(L)
-    CR = Array{Any}(L)
+    CL = Array{Any}(Lorth)
+    CR = Array{Any}(Lorth)
     initializeHLR(mps,mpo,HL,HR)
     initializeCLR(mps,CL,CR,orth)
 
@@ -270,11 +270,10 @@ function DMRG(mps_input, mpo, prec, orth=nothing)
 end
 
 """ sweeps from left to right in the DMRG algorithm """
-function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
+function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
     ### minimizes E by diagonalizing site by site in the mps from left to right: j=1-->L-1
     ### the resulting sites are left-canonicalized
     L = length(mps)
-
     for j = 1:L-1
         if canonicity==-1
             j=L+1-j
@@ -284,18 +283,23 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         mpsguess = reshape(mps[j],prod(szmps))
         HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
         hefflin = LinearMap{Complex128}(HeffFun, prod(szmps),ishermitian=true)
-
-        if orth!=nothing
-            @tensor orthTensor[:] := CL[j][1,-1]*CR[j][2,-3]*conj(orth[j][1,-2,2])
+        proj = eye(size(hefflin)[1])
+        for k = 1:length(orth)
+            @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,prod(so))
-            orthvector = orthvector/norm(orthvector)
-            proj = nullspace(orthvector)'
-            hefflin = proj * hefflin * proj'
-            mpsguess = proj*mpsguess
+            orthvector = proj*orthvector'/norm(orthvector)
+            proj = nullspace(orthvector')' * proj
+        end
+        hefflin = proj * hefflin * proj'
+        mpsguess = proj*mpsguess
+
+        if size(hefflin)[1] < 10
+            evals, evecs = eig(Base.full(hefflin))
+        else
+            evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
         end
 
-        evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
             return 0
@@ -304,9 +308,8 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
         eval_min, ind_min = minimum(evals), indmin(evals)
         evec_min = evecs[:,ind_min]
 
-        if orth!=nothing
-            evec_min = proj'*evec_min
-        end
+        evec_min = proj'*evec_min
+
         Mj = reshape(evec_min,szmps)
         Aj,R = LRcanonical(Mj,-canonicity)
         mps[j] = Aj
@@ -317,7 +320,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
             @tensor mps[j-1][-1,-2,-3] := R[1,-3]*mps[j-1][-1,-2,1];
         end
         updateCLR(mps,CL,CR,j,canonicity,orth)
-        updateHeff(mps,mpo,HL,HR,j,canonicity)
+        updateHLR(mps,mpo,HL,HR,j,canonicity)
 
     end
 
@@ -333,12 +336,23 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=nothing)
     return mps, E, var, -canonicity
 end
 
+function n_lowest_states(mps, hamiltonian, prec,n)
+    states = []
+    energies = []
+    for k = 1:n
+        @time state,E = MPS.DMRG(mps,hamiltonian,prec,states)
+        append!(states,[state])
+        append!(energies,E)
+    end
+    return states,energies
+end
+
 function initializeHLR(mps,mpo,HL,HR)
     L = length(mps)
 
-    HR[L] = Array{Complex64}(1,1,1)
+    HR[L] = Array{Complex128}(1,1,1)
     HR[L][1,1,1] = 1
-    HL[1] = Array{Complex64}(1,1,1)
+    HL[1] = Array{Complex128}(1,1,1)
     HL[1][1,1,1] = 1
 
     for j=L-1:-1:1
@@ -349,25 +363,27 @@ function initializeHLR(mps,mpo,HL,HR)
     end
 end
 
-function initializeCLR(mps,CL,CR,orth=nothing)
-    if orth==nothing
-        return
-    end
+function initializeCLR(mps,CL,CR,orth=[])
     L = length(mps)
-    CR[L] = Array{Complex64}(1,1)
-    CR[L][1,1] = 1
-    CL[1] = Array{Complex64}(1,1)
-    CL[1][1,1] = 1
-    for j=1:L-1
-        @tensor begin
-            CR[L-j][-1,-2] := mps[L-j+1][-2,1,2]*conj(orth[L-j+1][-1,1,3])*CR[L-j+1][3,2]
-            CL[1+j][-1,-2] := mps[j][2,3,-2]*conj(orth[j][1,3,-1])*CL[j][1,2]
+
+    for k = 1:length(orth)
+        CR[k] = Array{Array{Complex128,2}}(L)
+        CL[k] = Array{Array{Complex128,2}}(L)
+        CR[k][L] = Array{Complex128}(1,1)
+        CR[k][L][1,1] = 1
+        CL[k][1] = Array{Complex128}(1,1)
+        CL[k][1][1,1] = 1
+        for j=1:L-1
+            @tensor begin
+                CR[k][L-j][-1,-2] := mps[L-j+1][-2,1,2]*conj(orth[k][L-j+1][-1,1,3])*CR[k][L-j+1][3,2]
+                CL[k][1+j][-1,-2] := mps[j][2,3,-2]*conj(orth[k][j][1,3,-1])*CL[k][j][1,2]
+            end
         end
     end
 end
 
 """ Update HL, HR, when tensor i has been updated in a dir-sweep"""
-function updateHeff(mps,mpo,HL,HR,i,dir)
+function updateHLR(mps,mpo,HL,HR,i,dir)
     L = length(mps)
     if dir==1
         @tensor HL[i+1][-1,-2,-3] := HL[i][1,2,3]*conj(mps[i][1,4,-1])*mpo[i][2,4,5,-2]*mps[i][3,5,-3]
@@ -377,16 +393,15 @@ function updateHeff(mps,mpo,HL,HR,i,dir)
     end
 end
 
-function updateCLR(mps,CL,CR,i,dir,orth=nothing)
-    if orth==nothing
-        return
-    end
+function updateCLR(mps,CL,CR,i,dir,orth=[])
     L = length(mps)
-    if dir==1
-        @tensor CL[i+1][-1,-2] := mps[i][2,3,-2]*conj(orth[i][1,3,-1])*CL[i][1,2]
-    end
-    if dir==-1
-        @tensor CR[i-1][-1,-2] := mps[i][-2,1,2]*conj(orth[i][-1,1,3])*CR[i][3,2]
+    for k = 1:length(orth)
+        if dir==1
+            @tensor CL[k][i+1][-1,-2] := mps[i][2,3,-2]*conj(orth[k][i][1,3,-1])*CL[k][i][1,2]
+        end
+        if dir==-1
+            @tensor CR[k][i-1][-1,-2] := mps[i][-2,1,2]*conj(orth[k][i][-1,1,3])*CR[k][i][3,2]
+        end
     end
 end
 
@@ -409,10 +424,9 @@ function multiplyMPOs(mpo1,mpo2)
     return mpo
 end
 
-
 function traceMPO(mpo)
     L = length(mpo)
-    F = Array{Complex64}(1,1)
+    F = Array{Complex128}(1,1)
     F[1,1] = 1
     for i = 1:L
         @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
@@ -420,7 +434,6 @@ function traceMPO(mpo)
 
     return F[1,1]
 end
-
 
 function HeffMult(tensor,mpo,HL,HR)
     @tensor temp[:] := HL[-1,1,4]*(mpo[1,-2,5,2]*tensor[4,5,6])*HR[-3,2,6]
@@ -436,7 +449,7 @@ function mpoExpectation(mps, mpo)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex64}(1,1,1)
+    F = Array{Complex128}(1,1,1)
     F[1,1,1] = 1
     for i = 1:L
         @tensor F[-1,-2,-3] := F[1,2,3]*mps[i][3,5,-3]*mpo[i][2,4,5,-2]*conj(mps[i][1,4,-1])
@@ -453,7 +466,7 @@ function mpoSquaredExpectation(mps, mpo)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex64}(1,1,1,1)
+    F = Array{Complex128}(1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
@@ -463,7 +476,7 @@ end
 
 """ returns the norm of an MPS """
 function MPSnorm(mps)
-    C = Array{Complex64}(1,1)
+    C = Array{Complex128}(1,1)
     C[1,1] = 1
     for i=1:length(mps)
         @tensor C[-1,-2] := mps[i][2,3,-2]*C[1,2]*conj(mps[i][1,3,-1])
@@ -477,7 +490,7 @@ function MPSoverlap(mps1,mps2)
         return 0
     else
         L = length(mps1)
-        C = Array{Complex64}(1,1)
+        C = Array{Complex128}(1,1)
         C[1,1] = 1
         for i=1:L
             @tensor C[-1,-2] := mps1[i][1,3,-2]*C[2,1]*conj(mps2[i][2,3,-1])
@@ -540,7 +553,6 @@ function makeCanonical(mps,n=0)
         end
     end
 end
-
 
 
 """ UNFINISHED. Von Neumann entropy across link i
