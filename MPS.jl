@@ -34,6 +34,100 @@ function MPOforHam(ham,L)
     return mpo
 end
 
+
+""" gives the mpo corresponding to a*mpo1 + b*mpo2.
+ """
+function addmpos(mpo1,mpo2,reduce=true,a=1,b=1)
+    L = length(mpo1)
+    d= size(mpo1[1])[2]
+    mpo = Array{Array{Complex{Float64}}}(L)
+    mpo[1] = permutedims(cat(1,permutedims(a*mpo1[1],[4,1,2,3]),permutedims(b*mpo2[1],[4,1,2,3])),[2,3,4,1])
+    for i = 2:L-1
+        mpo[i] = permutedims([permutedims(mpo1[i],[1,4,2,3]) zeros(size(mpo1[i])[1],size(mpo2[i])[4],d,d); zeros(size(mpo2[i])[1],size(mpo1[i])[4],d,d) permutedims(mpo2[i],[1,4,2,3])],[1,3,4,2])
+        println("size: ", size(mpo[i]))
+        if reduce
+            @tensor tmp[-1,-2,-3,-4,-5,-6] := mpo[i-1][-1,-2,-3,1]*mpo[i][1,-4,-5,-6]
+            tmp = reshape(tmp,size(mpo[i-1])[1]*d*d,d*d*size(mpo[i])[4])
+            U,S,V = svd(tmp)
+            V = V'
+            if S[length(S)] <1e-6
+                D = 0
+                while (D+1 < length(S)) & (S[D+1]>1e-6)
+                    D+=1
+                end
+                U,S,V = truncate_svd(U,S,V,D)
+            else D = length(S)
+            end
+            mpo[i-1] = reshape(1/2*U*diagm(S),size(mpo[i-1])[1],d,d,D)
+            mpo[i] = reshape(2*V,D,d,d,size(mpo[i])[4])
+        end
+    end
+    mpo[L] = permutedims(cat(1,permutedims(mpo1[L],[1,4,2,3]),permutedims(mpo2[L],[1,4,2,3])),[1,3,4,2])
+    if reduce
+        @tensor tmp[-1,-2,-3,-4,-5,-6] := mpo[L-1][-1,-2,-3,1]*mpo[L][1,-4,-5,-6]
+        tmp = reshape(tmp,size(mpo[L-1])[1]*d*d,d*d*size(mpo[L])[4])
+        U,S,V = svd(tmp)
+        V = V'
+        if S[length(S)] <1e-6
+            D = 0
+            while (D+1 < length(S)) & (S[D+1]>1e-6)
+                D+=1
+            end
+            U,S,V = truncate_svd(U,S,V,D)
+        else D = length(S)
+        end
+        mpo[L-1] = reshape(1/2*U*diagm(S),size(mpo[L-1])[1],d,d,D)
+        mpo[L] = reshape(2*V,D,d,d,size(mpo[L])[4])
+    end
+    return mpo
+end
+
+function truncate_svd(U, S, V, D)
+    U = U[:, 1:D]
+    S = S[1:D]
+    V = V[1:D, :]
+    return U, S, V
+end
+
+"""trancates the full MPS/MPO. There seems to be some bug """
+function truncate2(MPSO,eps=1e-6)
+    MP = MPSO
+    ismpo = false
+    L = length(MP)
+    if length(size(MP[1])) == 4
+        ismpo = true
+        for i = 1:L
+            s = size(MP[i])
+            MP[i] = reshape(MP[i],s[1],s[2]*s[3],s[4])
+        end
+    end
+    for i = 1:L-1
+        @tensor tmp[-1,-2,-3,-4] := MP[i][-1,-2,1]*MP[i+1][1,-3,-4];
+        s1 = size(MP[i]); s2 = size(MP[i+1]);
+        tmp = reshape(tmp,s1[1]*s1[2],s2[2]*s2[3])
+        U,S,V = svd(tmp)
+        V = V'
+        if S[length(S)] < eps
+            D = 0
+            while (D+1 < length(S)) & (S[D+1]>1e-6)
+                D+=1
+            end
+            U,S,V = truncate_svd(U,S,V,D)
+        else D = length(S)
+        end
+        MP[i] = reshape(1/2*U*diagm(S),s1[1],s1[2],D)
+        MP[i+1] = reshape(2*V,D,s2[2],s2[3])
+    end
+    if ismpo
+        for i=1:L
+            s = size(MP[i])
+            MP[i] = reshape(MP[i],s[1],round(Int,sqrt(s[2])),round(Int,sqrt(s[2])),s[3])
+        end
+    end
+    return MP
+end
+
+
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
 
