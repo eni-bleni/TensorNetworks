@@ -288,8 +288,9 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,prod(so))
-            orthvector = proj*orthvector'/norm(orthvector)
-            proj = nullspace(orthvector')' * proj
+            orthvector = orthvector/norm(orthvector)
+            tmp = [zeros(prod(so)) nullspace(orthvector)]
+            proj = proj*tmp*tmp'
         end
         hefflin = proj * hefflin * proj'
         mpsguess = proj*mpsguess
