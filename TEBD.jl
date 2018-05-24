@@ -89,22 +89,25 @@ function blocks_to_mpo(block,L,D=Inf)
     return MPO(mpo)
 end
 
-function time_evolve_simpler(mps, quench, total_time, steps, D)
+function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
 	### eth = (true,E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
-    dt = total_time/steps
+    if time==:red||steps==:req
+         throw(ArgumentError("time and steps keyword arguments must be specified"))
+    end
+    dt = time/steps
     L = length(mps)
     nops = length(quench.operators)
     exps = Array{Complex128,2}(nops,steps)
     for counter = 1:steps
-        time = counter*total_time/steps
-        mps = (quench.uMPO(dt,time)) * mps
+        t = counter*time/steps
+        mps = (quench.uMPO(dt,t)) * mps
         mps = reduce(mps,D)
         ## expectation values:
         for k = 1:nops
-            exps[k,counter] = mpoExpectation(mps.mps,quench.operators[k](time))
+            exps[k,counter] = mpoExpectation(mps.mps,quench.operators[k](t))
         end
     end
     return exps

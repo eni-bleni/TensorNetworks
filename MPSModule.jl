@@ -3,7 +3,7 @@ using TensorOperations
 using LinearMaps
 include("mpostruct.jl")
 include("TEBD.jl")
-export MPO, MPS, *, transpose, ctranspose, norm, reduce, split, n_lowest_states, DMRG
+export MPO, MPS, *, transpose, ctranspose, norm, reduce, split
 sx = [0 1; 1 0]
 sy = [0 1im; -1im 0]
 sz = [1 0; 0 -1]
@@ -205,8 +205,6 @@ function DMRG(mps, mpo, prec, orth=[])
     ### output: ground state mps, ground state energy
     if typeof(mps)==MPS
         mps = copy(mps.mps)
-        println("convert")
-        println(typeof(orth))
     end
     if typeof(mpo)==MPO
         mpo = copy(mpo.mpo)
@@ -269,8 +267,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         for k = 1:length(orth)
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
-            println(orthTensor)
-            println(typeof())
             orthvector = reshape(orthTensor,1,prod(so))
             orthvector = proj*orthvector'/norm(orthvector)
             proj = nullspace(orthvector')' * proj
@@ -317,7 +313,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         return 0
     end
     var = H2 - E^2
-    println(mps[2][1,1,1])
     return mps, E, var, -canonicity
 end
 
