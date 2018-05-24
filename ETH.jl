@@ -98,7 +98,7 @@ end
 init_params = (J0, h0, g0)
 ETH = (true,E1,hamiltonian)
 IDmpo = MPS.IdentityMPO(latticeSize,d)
-@time E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
+@time E_thermal, betahalf = TEBD.time_evolve(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
 # rho = MPS.multiplyMPOs(IDmpo,IDmpo)
 # E_thermal = MPS.traceMPO(MPS.multiplyMPOs(hamiltonian,rho))
 println("E_thermal, beta/2 = ", E_thermal, ", ", betahalf)

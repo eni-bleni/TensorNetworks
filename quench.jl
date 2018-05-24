@@ -92,14 +92,14 @@ ETH = (false,0,0) # dummys: no ETH calcs here
 ## thermal state MPO:
 init_params = (J0, h0, g0)
 IDmpo = MPS.IdentityMPO(latticeSize,d)
-@time TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
+@time TEBD.time_evolve(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
 rho = MPS.multiplyMPOs(IDmpo,IDmpo)
 
 
 ## Ising evolution:
 # init_params = (J0, h0, g0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Ising")
+# @time energy, entropy = TEBD.time_evolve(mps_evol,isingQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Ising")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -107,7 +107,7 @@ rho = MPS.multiplyMPOs(IDmpo,IDmpo)
 ## Heisenberg evolution:
 # init_params = (Jx0, Jy0, Jz0, hx0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Heisenberg")
+# @time energy, entropy = TEBD.time_evolve(mps_evol,heisenbergQuench,total_time,steps,maxBondDim,entropy_cut,init_params,ETH,"Heisenberg")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 

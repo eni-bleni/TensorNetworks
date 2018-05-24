@@ -1,7 +1,9 @@
-module MPS
+module MPSModule
 using TensorOperations
 using LinearMaps
-# define Pauli matrices
+include("mpostruct.jl")
+include("TEBD.jl")
+export MPO, MPS, *, transpose, ctranspose, norm, reduce, split, n_lowest_states, DMRG
 sx = [0 1; 1 0]
 sy = [0 1im; -1im 0]
 sz = [1 0; 0 -1]
@@ -34,33 +36,6 @@ function MPOforHam(ham,L)
     return mpo
 end
 
-""" Returns the left or right canonical form of a single tensor:
-    -1 is leftcanonical, 1 is rightcanonical
-
-        ```LRcanonical(tensor,direction) -> A,R,DB```"""
-function LRcanonical(M,dir)
-    D1,d,D2 = size(M); # d = phys. dim; D1,D2 = bond dims
-    if dir == -1
-        M = permutedims(M,[2,1,3]);
-        M = reshape(M,D1*d,D2);
-        A,R = qr(M); # M = Q R
-        DB = size(R)[1]; # intermediate bond dimension
-        A = reshape(A,d,D1,DB);
-        A = permutedims(A,[2,1,3]);
-    elseif dir == 1
-        M = permutedims(M,[1,3,2]);
-        M = reshape(M,D1,d*D2);
-        A,R = qr(M');
-        A = A';
-        R = R';
-        DB = size(R)[2];
-        A = reshape(A,DB,D2,d);
-        A = permutedims(A,[1,3,2]);
-    else println("ERROR: not left or right canonical!");
-        A = R = DB = 0;
-    end
-    return A,R,DB
-end
 
 """ Returns an MPO of length L for with Operators O_i at position  j_i
 
@@ -225,11 +200,18 @@ end
     The state will be orthogonal to orth (optional argument).
 
     ```DMRG(mps,hamiltonian mpo,precision,orth=nothing) -> mps, energy```"""
-function DMRG(mps_input, mpo, prec, orth=[])
+function DMRG(mps, mpo, prec, orth=[])
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
-
-    mps = 1*mps_input  # ATTENTION: necessary trick to keep mps local variable
+    if typeof(mps)==MPS
+        mps = copy(mps.mps)
+        println("convert")
+        println(typeof(orth))
+    end
+    if typeof(mpo)==MPO
+        mpo = copy(mpo.mpo)
+    end
+    # mps = 1*mps_input  # ATTENTION: necessary trick to keep mps local variable
     L = length(mps)
     Lorth = length(orth)
     if !(MPSnorm(mps) ≈ 1) | L != length(mpo)
@@ -287,6 +269,8 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         for k = 1:length(orth)
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
+            println(orthTensor)
+            println(typeof())
             orthvector = reshape(orthTensor,1,prod(so))
             orthvector = proj*orthvector'/norm(orthvector)
             proj = nullspace(orthvector')' * proj
@@ -333,6 +317,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         return 0
     end
     var = H2 - E^2
+    println(mps[2][1,1,1])
     return mps, E, var, -canonicity
 end
 
@@ -340,7 +325,7 @@ function n_lowest_states(mps, hamiltonian, prec,n)
     states = []
     energies = []
     for k = 1:n
-        @time state,E = MPS.DMRG(mps,hamiltonian,prec,states)
+        @time state,E = DMRG(mps,hamiltonian,prec,states)
         append!(states,[state])
         append!(energies,E)
     end
@@ -517,44 +502,6 @@ function check_LRcanonical(a, dir)
         return false
     end
     return c ≈ eye(size(c)[1])
-end
-
-
-""" Make mps L-can left of site n and R-can right of site.
-    No site specified implies right canonical
-
-    ``` makeCanonical(mps,n=0)```"""
-function makeCanonical(mps,n=0)
-    L = length(mps)
-    mpo_trafo = 0
-
-    if length(size(mps[1])) == 4 # make mps out of mpo
-        mpo_trafo = 1
-        smps = Array{Any}(L)
-        for i = 1:L
-            smps[i] = size(mps[i])
-            mps[i] = reshape(mps[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
-        end
-    end
-
-    for i = 1:n-1
-        mps[i],R,DB = LRcanonical(mps[i],-1);
-        if i<L
-            @tensor mps[i+1][-1,-2,-3] := R[-1,1]*mps[i+1][1,-2,-3];
-        end
-    end
-    for i = L:-1:n+1
-        mps[i],R,DB = LRcanonical(mps[i],1);
-        if i>1
-            @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
-        end
-    end
-
-    if mpo_trafo == 1 # transform mps back into mpo
-        for i = 1:L
-            mps[i] = reshape(mps[i], smps[i][1],smps[i][2],smps[i][3],smps[i][4])
-        end
-    end
 end
 
 
