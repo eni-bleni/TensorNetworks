@@ -6,7 +6,7 @@ println("\n---------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = 20
+maxBondDim = 10
 d = 2
 prec = 1e-8
 
@@ -84,7 +84,7 @@ ground,E0 = MPS.DMRG(mps,hamiltonian,prec)
 
 
 println("\n...performing excited state DMRG...")
-E1 = E0
+exc,E1 = ground,E0
 while E1 ≈ E0 # find true excited state, not degenerate ground state
     exc,E1 = MPS.DMRG(mps,hamiltonian,prec,ground)
 end
@@ -93,14 +93,29 @@ end
 ################################################################################
 ##                                  ETH
 ################################################################################
+println("...performing ETH...")
 
 ## thermal state MPO:
 init_params = (J0, h0, g0)
 ETH = (true,E1,hamiltonian)
 IDmpo = MPS.IdentityMPO(latticeSize,d)
 @time E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
-# rho = MPS.multiplyMPOs(IDmpo,IDmpo)
-# E_thermal = MPS.traceMPO(MPS.multiplyMPOs(hamiltonian,rho))
+rho_th = MPS.multiplyMPOs(IDmpo,IDmpo)
+E_thermal = MPS.traceMPO(MPS.multiplyMPOs(hamiltonian,rho_th))
 println("E_thermal, beta/2 = ", E_thermal, ", ", betahalf)
+
+# rho_exc = MPS.pureDensityMatrix(exc)
+# dist = MPS.addmpos(rho_exc,rho_th,false,1,-1)
+# tr_dist = MPS.traceMPO(MPS.multiplyMPOs(dist,dist))
+# println("Tr(dist^2) = ", tr_dist)
+# tic()
+# tr_dist = MPS.traceMPO(MPS.multiplyMPOs(rho_th,rho_th)) -2*MPS.mpoExpectation(exc,rho_th) + 1
+# println("Tr(dist^2) = ", tr_dist)
+# toc()
+
+tic()
+tr_dist = MPS.traceMPO(rho_th,2) -2*MPS.mpoExpectation(exc,rho_th) + 1
+println("Tr(dist^2) = ", tr_dist)
+toc()
 
 ;

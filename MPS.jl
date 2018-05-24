@@ -44,7 +44,6 @@ function addmpos(mpo1,mpo2,reduce=true,a=1,b=1)
     mpo[1] = permutedims(cat(1,permutedims(a*mpo1[1],[4,1,2,3]),permutedims(b*mpo2[1],[4,1,2,3])),[2,3,4,1])
     for i = 2:L-1
         mpo[i] = permutedims([permutedims(mpo1[i],[1,4,2,3]) zeros(size(mpo1[i])[1],size(mpo2[i])[4],d,d); zeros(size(mpo2[i])[1],size(mpo1[i])[4],d,d) permutedims(mpo2[i],[1,4,2,3])],[1,3,4,2])
-        println("size: ", size(mpo[i]))
         if reduce
             @tensor tmp[-1,-2,-3,-4,-5,-6] := mpo[i-1][-1,-2,-3,1]*mpo[i][1,-4,-5,-6]
             tmp = reshape(tmp,size(mpo[i-1])[1]*d*d,d*d*size(mpo[i])[4])
@@ -504,15 +503,29 @@ function multiplyMPOs(mpo1,mpo2)
 end
 
 
-function traceMPO(mpo)
+"""
+calculates Tr(mpo^n) for n=1 or n=2
+"""
+function traceMPO(mpo,n=1)
     L = length(mpo)
-    F = Array{Complex64}(1,1)
-    F[1,1] = 1
-    for i = 1:L
-        @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+    if n == 1
+        F = Array{Complex64}(1,1)
+        F[1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+        end
+        return F[1,1]
+    elseif n == 2
+        F = Array{Complex64}(1,1,1,1)
+        F[1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,4,3,-4])
+        end
+        return F[1,1,1,1]
+    else
+        println("ERROR: choose n=1 or 2 in traceMPO(mpo,n=1)")
+        return "nan"
     end
-
-    return F[1,1]
 end
 
 
@@ -635,6 +648,22 @@ function makeCanonical(mps,n=0)
     end
 end
 
+
+"""
+constructs |Psi><Psi|
+"""
+function pureDensityMatrix(mps)
+    L = length(mps)
+    rho = Array{Any}(L)
+    for i = 1:L
+        D1,d,D2 = size(mps[i])
+        @tensor help[-1,-2,-3,-4,-5,-6] := conj(mps[i][-3,-1,-2])*mps[i][-5,-6,-4]
+        help = reshape(permutedims(help, [3,5,6,1,2,4]), D1*D1,d,d,D2*D2)
+        rho[i] = help
+    end
+
+    return rho
+end
 
 
 """ UNFINISHED. Von Neumann entropy across link i
