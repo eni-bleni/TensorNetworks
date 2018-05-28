@@ -60,7 +60,7 @@ function truncate_svd(U, S, V, D)
 end
 
 
-""" block_decimation(W, Tl, Tr, Dmax)
+""" block_decimation(W, Tl, Tr, Dmax,dir)
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
 and performs a block decimation (one TEBD step)
 ```block_decimation(W,TL,TR,Dmax,dir) -> Tl, Tr"""

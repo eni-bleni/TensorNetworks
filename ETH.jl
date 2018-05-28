@@ -12,8 +12,8 @@ prec = 1e-8
 
 ## Ising parameters:
 J0 = 1.0
-h0 = 0.0
-g0 = 3.0
+h0 = 1.0
+g0 = 0.0
 
 ## Heisenberg parameters:
 Jx0 = 1.0
@@ -22,7 +22,7 @@ Jz0 = 1.0
 hx0 = 1.0
 
 ## TEBD parameters:
-total_time = -im*1.0    # -im*total_time  for imag time evol
+total_time = -im*1.5    # -im*total_time  for imag time evol
 steps = 1000
 entropy_cut = 4         # subsytem size for entanglement entopy; set to 0 to disregard
 
@@ -35,7 +35,7 @@ s0 = [0 0; 0 0]
 
 
 
-function isingQuench(i, time, params)
+function thermalIsing(i, time, params) # like isingQuench() function but w/o time evolved params
     J, h, g = params
     ZZ = kron(sz, sz)
     ZI = kron(sz, si)
@@ -52,7 +52,7 @@ function isingQuench(i, time, params)
     end
 end
 
-function heisenbergQuench(i,time, params)
+function thermalHeisenberg(i,time, params)
     Jx, Jy, Jz, hx = params
     XX = kron(sx, sx)
     YY = kron(sy, sy)
@@ -89,7 +89,7 @@ MPS.makeCanonical(mps)
 #     exc,E1 = MPS.DMRG(mps,hamiltonian,prec,ground)
 # end
 
-states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,10)
+states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,15)
 println("energies: ", energies)
 
 
@@ -100,28 +100,29 @@ println("\n...performing ETH...")
 
 ## thermal state MPO:
 init_params = (J0, h0, g0)
+tr_dist = Array{Any}(length(energies))
+
+tic()
 for i = 2:length(energies)
     println("\ni = ", i)
     exc = states[i]
     E1 = energies[i]
     ETH = (true,E1,hamiltonian)
     IDmpo = MPS.IdentityMPO(latticeSize,d)
-    E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time,steps,maxBondDim,0,init_params,ETH)
-    rho_th = MPS.multiplyMPOs(IDmpo,IDmpo)
-    E_thermal = MPS.traceMPO(MPS.multiplyMPOs(hamiltonian,rho_th))
+    E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,thermalIsing,total_time,steps,maxBondDim,0,init_params,ETH)
+    rho_th = MPS.multiplyMPOs(IDmpo,IDmpo) # = exp[-beta/2 H]*exp[-beta/2 H]'
+    tr_dist[i] = MPS.traceMPO(IDmpo,4) -2*MPS.mpoExpectation(exc,rho_th) + 1 # = Tr(rho_th^2) - 2<exc|rho_th|exc> + 1 = Tr([rho_th-|exc><exc|]^2)
     println("E_thermal, beta/2 = ", E_thermal, ", ", betahalf)
-
-    # rho_exc = MPS.pureDensityMatrix(exc)
-    # dist = MPS.addmpos(rho_exc,rho_th,false,1,-1)
-    # tr_dist = MPS.traceMPO(MPS.multiplyMPOs(dist,dist))
-    # println("Tr(dist^2) = ", tr_dist)
-    # tic()
-    # tr_dist = MPS.traceMPO(MPS.multiplyMPOs(rho_th,rho_th)) -2*MPS.mpoExpectation(exc,rho_th) + 1
-    # println("Tr(dist^2) = ", tr_dist)
-    # toc()
-
-    tr_dist = MPS.traceMPO(rho_th,2) -2*MPS.mpoExpectation(exc,rho_th) + 1
-    println("E_exc, Tr(dist^2) = ", E1, ", ", tr_dist)
+    println("E_exc, Tr(dist^2) = ", E1, ", ", real(tr_dist[i]))
 end
+toc()
 
+## PLOTTING
+figure(1)
+plot(real(energies[2:end]), real(tr_dist[2:end]))
+
+
+
+
+show()
 ;
