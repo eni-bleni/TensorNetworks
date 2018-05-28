@@ -3,57 +3,12 @@ using TensorOperations
 # include("mpostruct.jl")
 # using MPS
 # define Pauli matrices
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
-
-""" returns the Ising parameters after every time evolution step """
-function evolveIsingParams(J0, h0, g0, time)
-    ### time evolution of all quench parameters
-    J = J0
-    h = h0 #+ exp(-3(time-2)^2)
-    g = g0
-
-    return J, h, g
-end
-
-function TwoSiteHeisenbergHamiltonian(Jx,Jy,Jz,hx)
-    XX = kron(sx, sx)
-    YY = kron(sy, sy)
-    ZZ = kron(sz, sz)
-    XI = kron(sx, si)
-    IX = kron(si, sx)
-    H = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+IX)
-    return H
-end
-
-""" returns the Heisenberg parameters after every time evolution step """
-function evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
-    ### time evolution of all quench parameters
-    Jx = Jx0
-    Jy = Jy0
-    Jz = Jz0
-    hx = hx0 #+ exp(-(time-2)^2)
-
-    return Jx, Jy, Jz, hx
-end
-
 
 function truncate_svd(U, S, V, D)
     U = U[:, 1:D]
     S = S[1:D]
     V = V[1:D, :]
     return U, S, V
-end
-
-
-struct quench
-    hamblock
-    hamMPO
-    uMPO
-    operators
 end
 
 function trotterblocks_timestep_mpo(block,L,dt,time)
@@ -100,17 +55,21 @@ function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf)
     dt = time/steps
     L = length(mps)
     nops = length(quench.operators)
-    exps = Array{Complex128,2}(nops,steps)
+    exps = Array{Complex128,2}(nops+1,steps)
     for counter = 1:steps
         t = counter*time/steps
         mps = (quench.uMPO(dt,t)) * mps
         mps = reduce(mps,D)
         ## expectation values:
-        for k = 1:nops
-            exps[k,counter] = mpoExpectation(mps.mps,quench.operators[k](t))
+        for k = 0:nops
+            if k==0
+                exps[k+1,counter] = t
+            else
+                exps[k+1,counter] = trace(mps'*(quench.operators[k](t)*mps))
+            end
         end
     end
-    return exps
+    return mps,exps
 end
 
 

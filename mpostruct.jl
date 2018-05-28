@@ -1,5 +1,6 @@
 using TensorOperations
-import Base: *, transpose, ctranspose, norm, getindex, length,split
+import Base: *, transpose, ctranspose, norm, getindex,length,
+ split, promote_rule, similar
 
 # struct MPOtensor <: AbstractArray{Complex128, 4}
 #     tensor :: Array{Complex128,4}
@@ -25,12 +26,35 @@ struct MPS
 end
 getindex(A::MPO,elems...) = getindex(A.mpo,elems...)
 getindex(v::MPS,elems...) = getindex(v.mps,elems...)
+Base.setindex!(A::MPO,X,elems...) = setindex!(A.mpo,X,elems...)
+Base.setindex!(v::MPS,X,elems...) = setindex!(v.mps,X,elems...)
 length(v::MPS) = length(v.mps)
 length(A::MPO) = length(A.mpo)
-
+Base.similar(A::MPO) = MPO(similar(A.mpo))
+similar(v::MPS) = MPS(similar(v.mps),v.dir)
+Base.copy(A::MPO) = MPO(copy(A.mpo))
+Base.copy(v::MPS) = MPS(copy(v.mps),v.dir)
 convert(::Type{MPS},tensor::Array{Array{Complex128,3},1}) = MPS(tensor,:ket)
 convert(::Type{Array{Array{Complex128,3},1}},mps::MPS) = mps.mps
+promote_rule(::Type{MPS}, ::Type{Array{Array{Complex128,3},1}}) = MPS
 MPS(v::Array{Array{Complex{Float64},3},1}) = MPS(v,:ket)
+
+function useMPOasMPS(mpo::MPO,f)
+    L = length(mpo)
+    smps = Array{Any}(L)
+    mps = Array{Array{Complex128,3},1}(L)
+    mpoout = similar(mpo)
+    for i = 1:L
+        smps[i] = size(mpo[i])
+        mps[i] = reshape(mpo[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
+    end
+    mps = f(MPS(mps))
+    for i = 1:L
+        smps2 = size(mps[i])
+        mpoout[i] = reshape(mps[i], smps2[1],smps[i][2],smps[i][3],smps2[3])
+    end
+    return mpoout
+end
 
 function *(A::MPO, v::MPS)
     b = similar(v.mps)
@@ -138,29 +162,41 @@ function Base.reduce(v::MPS, Dmax::Int)
     return MPS(Tlist,v.dir)
 end
 
+Base.reduce(A::MPO, Dmax::Int) = useMPOasMPS(A,(v)->reduce(v,Dmax))
+
+
 function ctranspose(A::MPO)
-    B = similar(A)
+    B = similar(A.mpo)
     L = length(A)
     for i = 1:L
         @tensor B[i][:] := conj(A[i][-1,-3,-2,-4])
     end
-    return B
+    return MPO(B)
 end
 function transpose(A::MPO)
-    B = similar(A)
+    B = similar(A.mpo)
     L = length(A)
     for i = 1:L
         @tensor B[i][:] := A[i][-1,-3,-2,-4]
     end
-    return B
+    return MPO(B)
 end
 
+function Base.trace(mpo::MPO)
+    L = length(mpo)
+    F = Array{Complex128}(1)
+    F[1] = 1
+    for i = 1:L
+        @tensor F[-1] := F[1]*mpo[i][1,2,2,-1]
+    end
+    return F[1]
+end
 function norm(mpo::MPO)
     L = length(mpo)
     F = Array{Complex128}(1,1)
     F[1,1] = 1
     for i = 1:L
-        @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+        @tensor F[-1,-2] := F[1,2]*mpo[i][2,5,4,-2]*conj(mpo[i][1,5,4,-1])
     end
     return F[1,1]
 end
@@ -186,20 +222,20 @@ function norm(mps::Array{Array{T,3},1})  where T<:Number
 end
 
 function ctranspose(v::MPS)
-    w = copy(v.mps)
+    w = similar(v.mps)
     L = length(v)
     for i = 1:L
-        @tensor w[i][:] = conj(v[i][-1,-2,-3])
+        @tensor w[i][:] := conj(v[i][-1,-2,-3])
     end
     dir = v.dir==:ket ? :bra : :ket
     return MPS(w,dir)
 end
 
 function transpose(v::MPS)
-    w = copy(v.mps)
+    w = similar(v.mps)
     L = length(v)
     for i = 1:L
-        @tensor w[i][:] = v[i][-1,-2,-3]
+        @tensor w[i][:] := v[i][-1,-2,-3]
     end
     dir = v.dir==:ket ? :bra : :ket
     return MPS(w,dir)
@@ -209,20 +245,9 @@ end
     No site specified implies right canonical
 
     ``` makeCanonical(mps,n=0)```"""
-function makeCanonical(mpsin,n=0)
+function makeCanonical(mpsin::Array{Array{T,3},1},n=0) where T<:Number
     mps = copy(mpsin)
     L = length(mps)
-    mpo_trafo = 0
-
-    if length(size(mps[1])) == 4 # make mps out of mpo
-        mpo_trafo = 1
-        smps = Array{Any}(L)
-        for i = 1:L
-            smps[i] = size(mps[i])
-            mps[i] = reshape(mps[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
-        end
-    end
-
     for i = 1:n-1
         mps[i],R,DB = LRcanonical(mps[i],-1);
         if i<L
@@ -235,14 +260,24 @@ function makeCanonical(mpsin,n=0)
             @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
         end
     end
-
-    if mpo_trafo == 1 # transform mps back into mpo
-        for i = 1:L
-            mps[i] = reshape(mps[i], smps[i][1],smps[i][2],smps[i][3],smps[i][4])
-        end
-    end
     return mps
 end
+
+makeCanonical(mps::MPS,n=0) = MPS(makeCanonical(mps.mps,n),mps.dir)
+makeCanonical(mpo::MPO,n=0) = useMPOasMPS(mpo,(mps)->makeCanonical(mps,n))
+    # L = length(mpo)
+    # smps = Array{Any}(L)
+    # mps = Array{Any}(L)
+    # mpoout = similar(mpo)
+    # for i = 1:L
+    #     smps[i] = size(mpo[i])
+    #     mps[i] = reshape(mpo[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
+    # end
+    # mps = makeCanonical(mps)
+    # for i = 1:L
+    #     mpoout[i] = reshape(mps[i], smps[i][1],smps[i][2],smps[i][3],smps[i][4])
+    # end
+    # return mpoout
 
 function LRcanonical(M,dir)
     D1,d,D2 = size(M); # d = phys. dim; D1,D2 = bond dims

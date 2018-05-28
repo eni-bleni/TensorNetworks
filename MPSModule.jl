@@ -1,14 +1,21 @@
 module MPSModule
+const sx = [0 1; 1 0]
+const sy = [0 1im; -1im 0]
+const sz = [1 0; 0 -1]
+const si = [1 0; 0 1]
+const s0 = [0 0; 0 0]
+const ZZ = kron(sz, sz)
+const ZI = kron(sz, si)
+const IZ = kron(si, sz)
+const XI = kron(sx, si)
+const IX = kron(si, sx)
 using TensorOperations
 using LinearMaps
 include("mpostruct.jl")
 include("TEBD.jl")
+include("quench.jl")
 export MPO, MPS, *, transpose, ctranspose, norm, reduce, split
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
+
 
 """
 Returns the MPO for a 2-site Hamiltonian
@@ -36,7 +43,6 @@ function MPOforHam(ham,L)
     return mpo
 end
 
-
 """ Returns an MPO of length L for with Operators O_i at position  j_i
 
         ```MpoFromOperators(ops,L) -> mpo```"""
@@ -49,7 +55,7 @@ function MpoFromOperators(ops,L)
     for i = 1:length(ops)
         mpo[ops[i][2]] = reshape(ops[i][1],1,d,d,1)
     end
-    return mpo
+    return MPO(mpo)
 end
 
 """ Computes the expectation value of operators O_i sitting on site j_i
@@ -98,14 +104,13 @@ end
 
 ```IdentityMPO(lattice sites, phys dims)```"""
 function IdentityMPO(L, d)
-    # mpo = Array{Array{Complex{Float32},4}}(L)
-    mpo = Array{Any}(L)
+    mpo = Array{Array{Complex128,4}}(L)
     for i = 1:L
         mpo[i] = Array{Complex128}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
 
-    return mpo
+    return MPO(mpo)
 end
 
 
@@ -131,7 +136,7 @@ function IsingMPO(L, J, h, g, shift=0)
         help[2,:,:,3] = sz
         mpo[i] = help
     end
-    return mpo
+    return MPO(mpo)
 end
 
 """ Returns the Hamiltonian for the Heisenberg model in transverse field as an MPO
@@ -169,46 +174,25 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
         help[5,:,:,1] = help[5,:,:,2] = help[5,:,:,3] = help[5,:,:,4] = s0
         mpo[i] = help
     end
-    return mpo
-end
-
-
-""" Returns a random MPS
-
-```randomMPS(length,physical dim, bond dim)```"""
-function randomMPS(L,d,D)
-    ### L: lenght of mps = number of sites/tensors
-    ### d: physical dim
-    ### D: bond dim
-
-    mps = Array{Any}(L)
-    ran = rand(d,D)+1im*rand(d,D)
-    ran = ran/norm(ran)
-    mps[1] = reshape(ran,1,d,D)
-    for i = 2:1:L-1
-        ran = rand(D,d*D)+1im*rand(D,d*D)
-        ran = ran/norm(ran)
-        mps[i] = reshape(ran,D,d,D)
-    end
-    ran = rand(D,d)+1im*rand(D,d)
-    ran = ran/norm(ran)
-    mps[L] = reshape(ran,D,d,1)
-    return mps
+    return MPO(mpo)
 end
 
 """ employs the variational MPS method to find the ground state/energy.
     The state will be orthogonal to orth (optional argument).
 
     ```DMRG(mps,hamiltonian mpo,precision,orth=nothing) -> mps, energy```"""
-function DMRG(mps, mpo, prec, orth=[])
+function DMRG(mps::MPS, mpo::MPO, prec, orth=Array{MPS}(0)::Array{MPS})
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
-    if typeof(mps)==MPS
+    dir = mps.dir
+    if dir==:bra
+        mps = copy(mps'.mps)
+        mpo = copy(mpo'.mpo)
+    else
         mps = copy(mps.mps)
-    end
-    if typeof(mpo)==MPO
         mpo = copy(mpo.mpo)
     end
+
     # mps = 1*mps_input  # ATTENTION: necessary trick to keep mps local variable
     L = length(mps)
     Lorth = length(orth)
@@ -246,7 +230,7 @@ function DMRG(mps, mpo, prec, orth=[])
         end
     end
 
-    return mps, E
+    return MPS(mps,dir), E
 end
 
 """ sweeps from left to right in the DMRG algorithm """
@@ -268,8 +252,10 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,prod(so))
-            orthvector = proj*orthvector'/norm(orthvector)
-            proj = nullspace(orthvector')' * proj
+            orthvector = orthvector/norm(orthvector)
+            tmp = [zeros(prod(so)) nullspace(orthvector)]
+            proj = proj*tmp*tmp'
+
         end
         hefflin = proj * hefflin * proj'
         mpsguess = proj*mpsguess
