@@ -24,7 +24,7 @@ end
 function evolveIsingParams(J0, h0, g0, time)
     ### time evolution of all quench parameters
     J = J0
-    h = h0 #+ exp(-3(time-2)^2)
+    h = h0 + exp(-3(time-2)^2)
     g = g0
 
     return J, h, g
@@ -46,7 +46,7 @@ function evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
     Jx = Jx0
     Jy = Jy0
     Jz = Jz0
-    hx = hx0 #+ exp(-(time-2)^2)
+    hx = hx0 + exp(-(time-2)^2)
 
     return Jx, Jy, Jz, hx
 end
@@ -199,6 +199,12 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                 J, h, g = evolveIsingParams(J0, h0, g0, time)
                 hamiltonian = MPS.IsingMPO(L, J, h, g)
                 expect[counter,:] = [time MPS.mpoExpectation(mps,hamiltonian)]
+			elseif mpo == "Isingthermal"
+				J0, h0, g0 = params
+                J, h, g = evolveIsingParams(J0, h0, g0, time)
+                hamiltonian = MPS.IsingMPO(L, J, h, g)
+				rho = MPS.multiplyMPOs(mps,mps)
+                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]				
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
                 Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
