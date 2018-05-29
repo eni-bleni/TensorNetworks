@@ -14,7 +14,6 @@ end
 function trotterblocks_timestep_mpo(block,L,dt,time)
     function w(i,L)
         b = expm(-1im*dt*block(i,L,time))
-        s=size(b)
         return b
     end
     return blocks_to_mpo(w,L)
@@ -25,13 +24,15 @@ function blocks_to_mpo(block,L,D=Inf)
     b = block(1,L)
     d = Int(sqrt(size(b)[1]))
     b = reshape(b,d,d,d,d)
-    UL,VL = split(permutedims(b,[1 3 4 2]),D)
+    # UL,VL = split(permutedims(b,[1 3 4 2]),D)
+    UL,VL = split(permutedims(b,[3 1 2 4]),D)
     @tensor mpo[1][-1,-2,-3,-4] := ones(1)[-1]*UL[-3,-2,-4]
     for i=2:L-1
         b = block(i,L)
         s = Int(sqrt(size(b)[1]))
         b = reshape(b,d,d,d,d)
-        UR,VR = split(permutedims(b,[1 3 4 2]),D)
+        # UR,VR = split(permutedims(b,[1 3 4 2]),D)
+        UR,VR = split(permutedims(b,[3 1 2 4]),D)
         if iseven(i)
             @tensor mpo[i][-1,-2,-3,-4] := VL[-1,1,-3]*UR[1,-2,-4]
         else
@@ -44,7 +45,38 @@ function blocks_to_mpo(block,L,D=Inf)
     return MPO(mpo)
 end
 
-function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf)
+function tebd_sweep(mps,blocks,D=Inf)
+    L = length(mps)
+    offset = iseven(L) ? 1 : 0
+    for i = 1:2:L-1
+        block = blocks(i,L)
+        s = size(block)
+        d = Int(sqrt(s[1]))
+        block = reshape(block,d,d,d,d)
+        @tensor tensor[:] := mps[i][-1,1,2]*block[-2,-3,1,3]*mps[i+1][2,3,-4]
+        mps[i], mps[i+1] = split(tensor,D,:right)
+        mps[i+1],R,DB = LRcanonical(mps[i+1],-1) # leftcanonicalize current sites
+        if i < L-1
+            @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
+        end
+    end
+    for i = (L-offset):-2:2
+        block = blocks(i-1,L)
+        s = size(block)
+        d = Int(sqrt(s[1]))
+        block = reshape(block,d,d,d,d)
+        @tensor tensor[:] := mps[i-1][-1,1,2]*block[-2,-3,1,3]*mps[i][2,3,-4]
+        mps[i-1], mps[i] = split(tensor,D,:left)
+
+        mps[i-1],R,DB = LRcanonical(mps[i-1],1) # rightcanonicalize current sites
+        if i>2
+            @tensor mps[i-2][:] := mps[i-2][-1,-2,1]*R[1,-3]
+        end
+    end
+    return mps
+end
+
+function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf,method=:mpo)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -58,8 +90,14 @@ function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf)
     exps = Array{Complex128,2}(nops+1,steps)
     for counter = 1:steps
         t = counter*time/steps
-        mps = (quench.uMPO(dt,t)) * mps
-        mps = reduce(mps,D)
+        if method==:mpo
+            mps = (quench.uMPO(dt,t)) * mps
+            mps = reduce(mps,D)
+        end
+        if method==:tebd
+            blocks(i,L) = expm(-1im*dt*quench.hamblock(i,L,t))
+            mps = tebd_sweep(mps,blocks,D)
+        end
         ## expectation values:
         for k = 0:nops
             if k==0

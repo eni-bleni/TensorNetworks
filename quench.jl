@@ -9,7 +9,7 @@ function isingQuench(L, params, operators=[])
     blocks(i, L, time) = ising_trotter_block(i,L,params,time)
     ham(time) = IsingMPO(L,params(time)...)
     uMPO(dt,time) = trotterblocks_timestep_mpo(blocks,L,dt,time)
-    return quench(nothing, nothing, uMPO, vcat(operators, [ham]))
+    return quench(blocks, ham, uMPO, vcat(operators, [ham]))
 end
 function ising_trotter_block(i, L, params,time=0)
     J,h,g = params(time)
