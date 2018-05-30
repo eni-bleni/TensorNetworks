@@ -151,6 +151,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 
     expect = Array{Any}(steps,2)
     entropy = Array{Any}(steps,2)
+	magnetization = Array{Any}(steps,2)
 
     for counter = 1:steps
         time = counter*total_time/steps
@@ -204,7 +205,9 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                 J, h, g = evolveIsingParams(J0, h0, g0, time)
                 hamiltonian = MPS.IsingMPO(L, J, h, g)
 				rho = MPS.multiplyMPOs(mps,mps)
-                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]				
+                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]
+				magnet_pos = Int(round(L/2)) # position for magnetization op in spin chain
+				magnetization[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L)))]
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
                 Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
@@ -231,7 +234,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 		end
     end
 
-    return expect, entropy
+    return expect, entropy, magnetization
 end
 
 
