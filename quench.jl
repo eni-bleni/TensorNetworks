@@ -128,19 +128,19 @@ init_params = (J0, h0, g0)
 ## Ising evolution:
 # init_params = (J0, h0, g0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy, magnetization = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxBondDim,entropy_cut,init_params,ETH,"Ising")
+# @time energy, entropy, magnetization, correlation, corr_length = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxBondDim,entropy_cut,init_params,ETH,"Ising")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
 ## thermal quench:
 init_params = (J0, h0, g0)
-@time energy, entropy, magnetization = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxBondDim,0,init_params,ETH,"Isingthermal")
+@time energy, entropy, magnetization, correlation, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxBondDim,0,init_params,ETH,"Isingthermal")
 
 
 ## Heisenberg evolution:
 # init_params = (Jx0, Jy0, Jz0, hx0)
 # println("Norm: ", MPS.MPSnorm(mps_evol))
-# @time energy, entropy, magnetization = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxBondDim,entropy_cut,init_params,ETH,"Heisenberg")
+# @time energy, entropy, magnetization, correlation, corr_length = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxBondDim,entropy_cut,init_params,ETH,"Heisenberg")
 # println("Norm: ", MPS.MPSnorm(mps_evol))
 # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -160,6 +160,16 @@ figure(3)
 plot(abs.(magnetization[:,1]), real.(magnetization[:,2]))
 xlabel("time")
 ylabel("magnetization")
+
+figure(4)
+plot(abs.(correlation[:,1]), real.(correlation[:,2]))
+xlabel("time")
+ylabel("correlation function")
+
+figure(5)
+plot(abs.(corr_length[:,1]), real.(corr_length[:,2]))
+xlabel("time")
+ylabel("correlation length")
 
 
 

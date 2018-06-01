@@ -189,10 +189,17 @@ function correlation_length(mps, d)
     corr = Array{Any}(L,2)
     ind_max = 1
 
+    O1 = randn(d,d)
+    O2 = randn(d,d)
+
     for m = 1:L # calculation of correlation function in dpendence of distance m
-        ops_list = [[randn(d,d),1],[randn(d,d),m]]
+        ops_list = [[O1,1],[O2,m]]
         corr[m,1] = m
-        corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+        if length(size(mps[1])) == 4 # MPO case
+            corr[m,2] = traceMPO(multiplyMPOs(mps, MpoFromOperators(ops_list,L))) - traceMPO(multiplyMPOs(mps, MpoFromOperators([ops_list[1]],L)))*traceMPO(multiplyMPOs(mps, MpoFromOperators([ops_list[2]],L)))
+        else
+            corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+        end
     end
 
     for m = 1:L # calculation of maximal index up to which corr is above machine precision (for fit interval)
@@ -202,11 +209,11 @@ function correlation_length(mps, d)
             break
         end
     end
-    println("ind_max: ", ind_max)
+    # println("ind_max: ", ind_max)
 
     a, b = linreg(corr[1:ind_max,1], log.(abs.(corr[1:ind_max,2])))
     xi = -1/b
-    println("xi = ", xi)
+    # println("xi = ", xi)
 
     return corr, xi, ind_max, a, b
 end
