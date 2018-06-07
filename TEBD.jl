@@ -212,7 +212,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 				magnetization[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L)))]
                 spin_pos = [[sz,Int(round(L/4))], [sz,Int(round(3/4*L))]] # position of spins in chain for correlation fct
                 correlation[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators(spin_pos,L)))]
-                corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
+                # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
                 Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
