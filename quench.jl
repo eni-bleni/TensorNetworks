@@ -6,7 +6,7 @@ println("\n---quench.jl------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = [10, 20, 40]
+maxBondDim = [10, 20, 40, 80]
 d = 2
 prec = 1e-8
 
@@ -24,7 +24,7 @@ hx0 = 1.0
 ## TEBD parameters:
 total_time_thermal = -im*[1.0]/2#, 1.0, 0.5, 0.1, 0.01]/2 # -im*total_time_thermal  for imag time evol
 total_time_quench = 20.0
-steps = 10000
+steps = 2000
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 # define Pauli matrices:
@@ -121,7 +121,7 @@ energy_all, entropy_all, magnetization_all, corr_fct_all, corr_length_all = [],[
 
 
 for beta_th in total_time_thermal
-    println("beta_th = ", beta_th)
+    println("beta_th = ", 2*real(im*beta_th))
 
     for maxD in maxBondDim
         println("maxD = ", maxD)
