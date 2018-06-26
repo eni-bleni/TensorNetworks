@@ -716,4 +716,37 @@ function entropy(mps,i)
 end
 
 
+"""
+Subsystem (1,l)<(1,L) squared trace distance btw MPO and MPS
+"""
+function SubTraceDistance(MPO,MPS,l)
+    L = length(MPO)
+    A = Array{Complex64}(1,1)
+    B1 = Array{Complex64}(1,1,1)
+    B2 = Array{Complex64}(1,1,1)
+    C = Array{Complex64}(1,1,1,1)
+    A[1,1] = 1
+    B1[1,1,1] = 1
+    B2[1,1,1] = 1
+    C[1,1,1,1] = 1
+    for i=1:l
+        @tensor begin
+                    A[-1,-2] := A[1,2]*MPO[i][1,4,3,-1]*conj(MPO[i][2,4,3,-2])
+                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,4,5,-2]*conj(MPS[i][3,5,-3])
+                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,4,-2])*conj(MPS[i][3,5,-3])
+                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,6,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,5,-4]
+                end
+    end
+    for i=l+1:L
+        @tensor begin
+                    A[-1,-2] := A[1,2]*MPO[i][1,3,3,-1]*conj(MPO[i][2,4,4,-2])
+                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,5,5,-2]*conj(MPS[i][3,4,-3])
+                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,5,-2])*conj(MPS[i][3,4,-3])
+                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
+                end
+    end
+    return A[1,1] + B1[1,1,1] + B2[1,1,1] + C[1,1,1,1]
+end
+
+
 end
