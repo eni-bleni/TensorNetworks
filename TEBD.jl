@@ -207,11 +207,12 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                 J, h, g = evolveIsingParams(J0, h0, g0, time)
                 hamiltonian = MPS.IsingMPO(L, J, h, g)
 				rho = MPS.multiplyMPOs(mps,mps)
-                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]
+                @time expect[counter,:] = [time real(MPS.traceMPOprod(rho,hamiltonian))] # = E
+                # @time expect[counter,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2))] # = E ## not yet correct result
 				magnet_pos = Int(round(L/2)) # position for magnetization op in spin chain
-				magnetization[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L)))]
-                spin_pos = [[sz,Int(round(L/4))], [sz,Int(round(3/4*L))]] # position of spins in chain for correlation fct
-                correlation[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators(spin_pos,L)))]
+				magnetization[counter,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L))]
+                spin_pos = [[sz,Int(floor(L/4))], [sz,Int(floor(3/4*L))]] # position of spins in chain for correlation fct
+                correlation[counter,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators(spin_pos,L))]
                 # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params

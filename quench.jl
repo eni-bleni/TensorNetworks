@@ -6,7 +6,7 @@ println("\n---quench.jl------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = [10, 20, 40, 80]
+maxBondDim = [20, 40, 80]
 d = 2
 prec = 1e-8
 

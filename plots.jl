@@ -3,14 +3,14 @@ using PyPlot
 
 ### compare exact numerical time evolution with MPS result:
 
-E_mps = readdlm("data/quench/energy.txt")
-E_exact = readdlm("data/quench/energy_exact.txt")
+E_mps = readdlm("data/quench/Gauss_L10_beta1_J1_h1/energy.txt")
+E_exact = readdlm("data/quench/Gauss_L10_beta1_J1_h1/energy_exact.txt")
 
-magnetization_mps = readdlm("data/quench/magnetization.txt")
-magnetization_exact = readdlm("data/quench/magnetization_exact.txt")
+magnetization_mps = readdlm("data/quench/Gauss_L10_beta1_J1_h1/magnetization.txt")
+magnetization_exact = readdlm("data/quench/Gauss_L10_beta1_J1_h1/magnetization_exact.txt")
 
-corr_fct_mps = readdlm("data/quench/corr_fct.txt")
-corr_fct_exact = readdlm("data/quench/corr_fct_exact.txt")
+corr_fct_mps = readdlm("data/quench/Gauss_L10_beta1_J1_h1/corr_fct.txt")
+corr_fct_exact = readdlm("data/quench/Gauss_L10_beta1_J1_h1/corr_fct_exact.txt")
 
 
 figure(1)

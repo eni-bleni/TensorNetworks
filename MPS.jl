@@ -559,7 +559,33 @@ function traceMPO(mpo,n=1)
         end
         return F[1,1,1,1,1,1,1,1]
     else
-        println("ERROR: choose n=1,2 or 4 in traceMPO(mpo,n=1)")
+        println("ERROR: choose n=1,2,4 in traceMPO(mpo,n=1)")
+        return "nan"
+    end
+end
+
+
+"""
+calculates Tr(mpo1^n * mpo2) for n=1,2
+"""
+function traceMPOprod(mpo1,mpo2,n=1)
+    L = length(mpo1)
+    if n == 1
+        F = Array{Complex64}(1,1,1,1)
+        F[1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,4,3,-4])
+        end
+        return F[1,1,1,1]
+    elseif n == 2
+        F = Array{Complex64}(1,1,1,1,1,1)
+        F[1,1,1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4,-5,-6] := F[-1,-2,-3,1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,5,6,-5])*conj(mpo2[i][3,6,4,-6])
+        end
+        return F[1,1,1,1,1,1]
+    else
+        println("ERROR: choose n=1,2 in traceMPOprod(mpo1,mpo2,n=1)")
         return "nan"
     end
 end
