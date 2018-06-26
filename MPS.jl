@@ -8,6 +8,7 @@ sz = [1 0; 0 -1]
 si = [1 0; 0 1]
 s0 = [0 0; 0 0]
 
+
 """
 Returns the MPO for a 2-site Hamiltonian
 """
@@ -127,6 +128,7 @@ function truncate2(MPSO,eps=1e-6)
 end
 
 
+
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
 
@@ -226,7 +228,7 @@ function IdentityMPO(L, d)
     # mpo = Array{Array{Complex{Float32},4}}(L)
     mpo = Array{Any}(L)
     for i = 1:L
-        mpo[i] = Array{Complex64}(1,d,d,1)
+        mpo[i] = Array{Complex128}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
 
@@ -237,21 +239,21 @@ end
 """ Returns the Hamiltonian for the Ising model in transverse field as an MPO
 
 ```IsingMPO(lattice sites,J,transverse,longitudinal)```"""
-function IsingMPO(L, J, h, g)
+function IsingMPO(L, J, h, g, shift=0)
     ### input:   L: lenght of mpo = number of sites/tensors; J,h,g: Ising Hamiltonian params
     ### constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
     ### first site: (i,j,b); last site: (a,i,j)
     mpo = Array{Any}(L)
-    mpo[1] = Array{Complex64}(1,2,2,3)
-    mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz],2,2,3)
-    mpo[L] = Array{Complex64}(3,2,2,1)
-    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,1,2])
+    mpo[1] = Array{Complex128}(1,2,2,3)
+    mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz+shift*si/L],2,2,3)
+    mpo[L] = Array{Complex128}(3,2,2,1)
+    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex64}(3,2,2,3)
+        help = Array{Complex128}(3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
         help[1,:,:,2] = J*sz
-        help[1,:,:,3] = h*sx+g*sz
+        help[1,:,:,3] = h*sx+g*sz+shift*si/L
         help[2,:,:,1] = help[2,:,:,2] = help[3,:,:,1] = help[3,:,:,2] = s0
         help[2,:,:,3] = sz
         mpo[i] = help
@@ -271,14 +273,14 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
     ###                          first site: (i,j,b); last site: (a,i,j)
 
     mpo = Array{Any}(L)
-    mpo[1] = Array{Complex64}(1,2,2,5)
+    mpo[1] = Array{Complex128}(1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
-    mpo[L] = Array{Complex64}(5,2,2,1)
+    mpo[L] = Array{Complex128}(5,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,1,2])
 
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex64}(5,2,2,5)
+        help = Array{Complex128}(5,2,2,5)
         help[1,:,:,1] = help[5,:,:,5] = si
         help[1,:,:,2] = Jx*sx
         help[1,:,:,3] = Jy*sy
@@ -564,7 +566,6 @@ function traceMPO(mpo,n=1)
     end
 end
 
-
 function HeffMult(tensor,mpo,HL,HR)
     @tensor temp[:] := HL[-1,1,4]*(mpo[1,-2,5,2]*tensor[4,5,6])*HR[-3,2,6]
     return temp
@@ -580,7 +581,7 @@ function mpoExpectation(mps1,mpo,mps2=mps1)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex64}(1,1,1)
+    F = Array{Complex128}(1,1,1)
     F[1,1,1] = 1
     for i = 1:L
         @tensor F[-1,-2,-3] := F[1,2,3]*mps1[i][3,5,-3]*mpo[i][2,4,5,-2]*conj(mps2[i][1,4,-1])
@@ -598,7 +599,7 @@ function mpoSquaredExpectation(mps, mpo)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex64}(1,1,1,1)
+    F = Array{Complex128}(1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
@@ -608,7 +609,7 @@ end
 
 """ returns the norm of an MPS """
 function MPSnorm(mps)
-    C = Array{Complex64}(1,1)
+    C = Array{Complex128}(1,1)
     C[1,1] = 1
     for i=1:length(mps)
         @tensor C[-1,-2] := mps[i][2,3,-2]*C[1,2]*conj(mps[i][1,3,-1])
@@ -622,7 +623,7 @@ function MPSoverlap(mps1,mps2)
         return 0
     else
         L = length(mps1)
-        C = Array{Complex64}(1,1)
+        C = Array{Complex128}(1,1)
         C[1,1] = 1
         for i=1:L
             @tensor C[-1,-2] := mps1[i][1,3,-2]*C[2,1]*conj(mps2[i][2,3,-1])
@@ -685,6 +686,7 @@ function makeCanonical(mps,n=0)
         end
     end
 end
+
 
 
 """
