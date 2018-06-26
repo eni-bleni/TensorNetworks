@@ -24,7 +24,7 @@ end
 function evolveIsingParams(J0, h0, g0, time)
     ### time evolution of all quench parameters
     J = J0
-    h = h0 #+ exp(-3(time-2)^2)
+    h = h0 + exp(-3(time-2)^2)
     g = g0
 
     return J, h, g
@@ -46,7 +46,7 @@ function evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
     Jx = Jx0
     Jy = Jy0
     Jz = Jz0
-    hx = hx0 #+ exp(-(time-2)^2)
+    hx = hx0 + exp(-(time-2)^2)
 
     return Jx, Jy, Jz, hx
 end
@@ -60,7 +60,7 @@ function truncate_svd(U, S, V, D)
 end
 
 
-""" block_decimation(W, Tl, Tr, Dmax)
+""" block_decimation(W, Tl, Tr, Dmax,dir)
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
 and performs a block decimation (one TEBD step)
 ```block_decimation(W,TL,TR,Dmax,dir) -> Tl, Tr"""
@@ -151,6 +151,9 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 
     expect = Array{Any}(steps,2)
     entropy = Array{Any}(steps,2)
+	magnetization = Array{Any}(steps,2)
+    correlation = Array{Any}(steps,2)
+    corr_length = Array{Any}(steps,2)
 
     for counter = 1:steps
         time = counter*total_time/steps
@@ -199,6 +202,17 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                 J, h, g = evolveIsingParams(J0, h0, g0, time)
                 hamiltonian = MPS.IsingMPO(L, J, h, g)
                 expect[counter,:] = [time MPS.mpoExpectation(mps,hamiltonian)]
+			elseif mpo == "Isingthermal"
+				J0, h0, g0 = params
+                J, h, g = evolveIsingParams(J0, h0, g0, time)
+                hamiltonian = MPS.IsingMPO(L, J, h, g)
+				rho = MPS.multiplyMPOs(mps,mps)
+                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]
+				magnet_pos = Int(round(L/2)) # position for magnetization op in spin chain
+				magnetization[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L)))]
+                spin_pos = [[sz,Int(round(L/4))], [sz,Int(round(3/4*L))]] # position of spins in chain for correlation fct
+                correlation[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators(spin_pos,L)))]
+                # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
                 Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
@@ -225,7 +239,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 		end
     end
 
-    return expect, entropy
+    return expect, entropy, magnetization, correlation, corr_length
 end
 
 

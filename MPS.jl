@@ -8,6 +8,127 @@ sz = [1 0; 0 -1]
 si = [1 0; 0 1]
 s0 = [0 0; 0 0]
 
+
+"""
+Returns the MPO for a 2-site Hamiltonian
+"""
+function MPOforHam(ham,L)
+    d = size(ham)[1]
+    mpo = Array{Any}(L)
+    tmp = reshape(permutedims(ham,[1,3,2,4]),d*d,d*d)
+    U,S,V = svd(tmp)
+    U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
+    V = reshape(diagm(sqrt.(S))*V',size(S)[1],d,d)
+    mpo[1] = permutedims(reshape(U,d,d,size(S),1),[1,4,3,2])
+    mpo[L] = permutedims(reshape(V,size(S),d,d,1),[2,1,4,3])
+    @tensor begin
+        tmpEven[-1,-2,-3,-4] := V[-2,-1,1]*U[1,-4,-3];
+        tmpOdd[-1,-2,-3,-4] := U[-1,1,-3]*V[-2,1,-4];
+    end
+    for i=2:L-1
+        if iseven(i)
+            mpo[i] = tmpEven
+        else
+            mpo[i] = tmpOdd
+        end
+    end
+    return mpo
+end
+
+
+""" gives the mpo corresponding to a*mpo1 + b*mpo2.
+ """
+function addmpos(mpo1,mpo2,reduce=true,a=1,b=1)
+    L = length(mpo1)
+    d= size(mpo1[1])[2]
+    mpo = Array{Array{Complex{Float64}}}(L)
+    mpo[1] = permutedims(cat(1,permutedims(a*mpo1[1],[4,1,2,3]),permutedims(b*mpo2[1],[4,1,2,3])),[2,3,4,1])
+    for i = 2:L-1
+        mpo[i] = permutedims([permutedims(mpo1[i],[1,4,2,3]) zeros(size(mpo1[i])[1],size(mpo2[i])[4],d,d); zeros(size(mpo2[i])[1],size(mpo1[i])[4],d,d) permutedims(mpo2[i],[1,4,2,3])],[1,3,4,2])
+        if reduce
+            @tensor tmp[-1,-2,-3,-4,-5,-6] := mpo[i-1][-1,-2,-3,1]*mpo[i][1,-4,-5,-6]
+            tmp = reshape(tmp,size(mpo[i-1])[1]*d*d,d*d*size(mpo[i])[4])
+            U,S,V = svd(tmp)
+            V = V'
+            if S[length(S)] <1e-6
+                D = 0
+                while (D+1 < length(S)) & (S[D+1]>1e-6)
+                    D+=1
+                end
+                U,S,V = truncate_svd(U,S,V,D)
+            else D = length(S)
+            end
+            mpo[i-1] = reshape(1/2*U*diagm(S),size(mpo[i-1])[1],d,d,D)
+            mpo[i] = reshape(2*V,D,d,d,size(mpo[i])[4])
+        end
+    end
+    mpo[L] = permutedims(cat(1,permutedims(mpo1[L],[1,4,2,3]),permutedims(mpo2[L],[1,4,2,3])),[1,3,4,2])
+    if reduce
+        @tensor tmp[-1,-2,-3,-4,-5,-6] := mpo[L-1][-1,-2,-3,1]*mpo[L][1,-4,-5,-6]
+        tmp = reshape(tmp,size(mpo[L-1])[1]*d*d,d*d*size(mpo[L])[4])
+        U,S,V = svd(tmp)
+        V = V'
+        if S[length(S)] <1e-6
+            D = 0
+            while (D+1 < length(S)) & (S[D+1]>1e-6)
+                D+=1
+            end
+            U,S,V = truncate_svd(U,S,V,D)
+        else D = length(S)
+        end
+        mpo[L-1] = reshape(1/2*U*diagm(S),size(mpo[L-1])[1],d,d,D)
+        mpo[L] = reshape(2*V,D,d,d,size(mpo[L])[4])
+    end
+    return mpo
+end
+
+function truncate_svd(U, S, V, D)
+    U = U[:, 1:D]
+    S = S[1:D]
+    V = V[1:D, :]
+    return U, S, V
+end
+
+"""trancates the full MPS/MPO. There seems to be some bug """
+function truncate2(MPSO,eps=1e-6)
+    MP = MPSO
+    ismpo = false
+    L = length(MP)
+    if length(size(MP[1])) == 4
+        ismpo = true
+        for i = 1:L
+            s = size(MP[i])
+            MP[i] = reshape(MP[i],s[1],s[2]*s[3],s[4])
+        end
+    end
+    for i = 1:L-1
+        @tensor tmp[-1,-2,-3,-4] := MP[i][-1,-2,1]*MP[i+1][1,-3,-4];
+        s1 = size(MP[i]); s2 = size(MP[i+1]);
+        tmp = reshape(tmp,s1[1]*s1[2],s2[2]*s2[3])
+        U,S,V = svd(tmp)
+        V = V'
+        if S[length(S)] < eps
+            D = 0
+            while (D+1 < length(S)) & (S[D+1]>1e-6)
+                D+=1
+            end
+            U,S,V = truncate_svd(U,S,V,D)
+        else D = length(S)
+        end
+        MP[i] = reshape(1/2*U*diagm(S),s1[1],s1[2],D)
+        MP[i+1] = reshape(2*V,D,s2[2],s2[3])
+    end
+    if ismpo
+        for i=1:L
+            s = size(MP[i])
+            MP[i] = reshape(MP[i],s[1],round(Int,sqrt(s[2])),round(Int,sqrt(s[2])),s[3])
+        end
+    end
+    return MP
+end
+
+
+
 """ Returns the left or right canonical form of a single tensor:
     -1 is leftcanonical, 1 is rightcanonical
 
@@ -70,10 +191,17 @@ function correlation_length(mps, d)
     corr = Array{Any}(L,2)
     ind_max = 1
 
+    O1 = randn(d,d)
+    O2 = randn(d,d)
+
     for m = 1:L # calculation of correlation function in dpendence of distance m
-        ops_list = [[randn(d,d),1],[randn(d,d),m]]
+        ops_list = [[O1,1],[O2,m]]
         corr[m,1] = m
-        corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+        if length(size(mps[1])) == 4 # MPO case
+            corr[m,2] = traceMPO(multiplyMPOs(mps, MpoFromOperators(ops_list,L))) - traceMPO(multiplyMPOs(mps, MpoFromOperators([ops_list[1]],L)))*traceMPO(multiplyMPOs(mps, MpoFromOperators([ops_list[2]],L)))
+        else
+            corr[m,2] = MPS.Correlator(ops_list,mps) - MPS.Correlator([ops_list[1]],mps)*MPS.Correlator([ops_list[2]],mps)
+        end
     end
 
     for m = 1:L # calculation of maximal index up to which corr is above machine precision (for fit interval)
@@ -83,11 +211,11 @@ function correlation_length(mps, d)
             break
         end
     end
-    println("ind_max: ", ind_max)
+    # println("ind_max: ", ind_max)
 
     a, b = linreg(corr[1:ind_max,1], log.(abs.(corr[1:ind_max,2])))
     xi = -1/b
-    println("xi = ", xi)
+    # println("xi = ", xi)
 
     return corr, xi, ind_max, a, b
 end
@@ -195,9 +323,9 @@ function randomMPS(L,d,D)
     return mps
 end
 
+
 """ employs the variational MPS method to find the ground state/energy.
     The state will be orthogonal to orth (optional argument).
-
     ```DMRG(mps,hamiltonian mpo,precision,orth=nothing) -> mps, energy```"""
 function DMRG(mps_input, mpo, prec, orth=[])
     ### input: canonical random mps
@@ -242,6 +370,7 @@ function DMRG(mps_input, mpo, prec, orth=[])
 
     return mps, E
 end
+
 
 """ sweeps from left to right in the DMRG algorithm """
 function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
@@ -311,6 +440,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
     return mps, E, var, -canonicity
 end
 
+
 function n_lowest_states(mps, hamiltonian, prec,n)
     states = []
     energies = []
@@ -321,6 +451,7 @@ function n_lowest_states(mps, hamiltonian, prec,n)
     end
     return states,energies
 end
+
 
 function initializeHLR(mps,mpo,HL,HR)
     L = length(mps)
@@ -402,15 +533,37 @@ function multiplyMPOs(mpo1,mpo2; c=true)
     return mpo
 end
 
-function traceMPO(mpo)
-    L = length(mpo)
-    F = Array{Complex128}(1,1)
-    F[1,1] = 1
-    for i = 1:L
-        @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
-    end
 
-    return F[1,1]
+"""
+calculates Tr(mpo^n) for n=1,2,4
+"""
+function traceMPO(mpo,n=1)
+    L = length(mpo)
+    if n == 1
+        F = Array{Complex64}(1,1)
+        F[1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+        end
+        return F[1,1]
+    elseif n == 2
+        F = Array{Complex64}(1,1,1,1)
+        F[1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,4,3,-4])
+        end
+        return F[1,1,1,1]
+    elseif n == 4
+        F = Array{Complex64}(1,1,1,1,1,1,1,1)
+        F[1,1,1,1,1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4,-5,-6,-7,-8] := F[-1,-2,-3,-4,1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,6,7,-6])*conj(mpo[i][3,7,8,-7])*mpo[i][4,8,5,-8]
+        end
+        return F[1,1,1,1,1,1,1,1]
+    else
+        println("ERROR: choose n=1,2 or 4 in traceMPO(mpo,n=1)")
+        return "nan"
+    end
 end
 
 function HeffMult(tensor,mpo,HL,HR)
@@ -418,11 +571,12 @@ function HeffMult(tensor,mpo,HL,HR)
     return temp
 end
 
-""" returns the mpo expectation value <mps|mpo|mps>
 
-    ```mpoExpectation(mps,mpo)```"""
-function mpoExpectation(mps, mpo)
-    L = length(mps)
+""" returns the mpo expectation value <mps1|mpo|mps2>
+
+    ```mpoExpectation(mps1,mpo,mps2=mps1)```"""
+function mpoExpectation(mps1,mpo,mps2=mps1)
+    L = length(mps1)
     if L != length(mpo)
         println("ERROR: MPS and MPO do not have same length")
         return 0
@@ -430,10 +584,11 @@ function mpoExpectation(mps, mpo)
     F = Array{Complex128}(1,1,1)
     F[1,1,1] = 1
     for i = 1:L
-        @tensor F[-1,-2,-3] := F[1,2,3]*mps[i][3,5,-3]*mpo[i][2,4,5,-2]*conj(mps[i][1,4,-1])
+        @tensor F[-1,-2,-3] := F[1,2,3]*mps1[i][3,5,-3]*mpo[i][2,4,5,-2]*conj(mps2[i][1,4,-1])
     end
     return F[1,1,1]
 end
+
 
 """ returns the squared mpo expectation value <mps|mpo^2|mps>
 
@@ -533,6 +688,24 @@ function makeCanonical(mps,n=0)
 end
 
 
+
+"""
+constructs |Psi><Psi| as an MPO
+"""
+function pureDensityMatrix(mps)
+    L = length(mps)
+    rho = Array{Any}(L)
+    for i = 1:L
+        D1,d,D2 = size(mps[i])
+        @tensor help[-1,-2,-3,-4,-5,-6] := conj(mps[i][-3,-1,-2])*mps[i][-5,-6,-4]
+        help = reshape(permutedims(help, [3,5,6,1,2,4]), D1*D1,d,d,D2*D2)
+        rho[i] = help
+    end
+
+    return rho
+end
+
+
 """ UNFINISHED. Von Neumann entropy across link i
 ``` entropy(mps,i) -> S```"""
 function entropy(mps,i)
@@ -542,6 +715,39 @@ function entropy(mps,i)
     U,S,V = svd(tensor)
     S = S.^2
     return -dot(S,log.(S))
+end
+
+
+"""
+Subsystem (1,l)<(1,L) squared trace distance btw MPO and MPS
+"""
+function SubTraceDistance(MPO,MPS,l)
+    L = length(MPO)
+    A = Array{Complex64}(1,1)
+    B1 = Array{Complex64}(1,1,1)
+    B2 = Array{Complex64}(1,1,1)
+    C = Array{Complex64}(1,1,1,1)
+    A[1,1] = 1
+    B1[1,1,1] = 1
+    B2[1,1,1] = 1
+    C[1,1,1,1] = 1
+    for i=1:l
+        @tensor begin
+                    A[-1,-2] := A[1,2]*MPO[i][1,4,3,-1]*conj(MPO[i][2,4,3,-2])
+                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,4,5,-2]*conj(MPS[i][3,5,-3])
+                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,4,-2])*conj(MPS[i][3,5,-3])
+                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,6,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,5,-4]
+                end
+    end
+    for i=l+1:L
+        @tensor begin
+                    A[-1,-2] := A[1,2]*MPO[i][1,3,3,-1]*conj(MPO[i][2,4,4,-2])
+                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,5,5,-2]*conj(MPS[i][3,4,-3])
+                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,5,-2])*conj(MPS[i][3,4,-3])
+                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
+                end
+    end
+    return A[1,1] + B1[1,1,1] + B2[1,1,1] + C[1,1,1,1]
 end
 
 
