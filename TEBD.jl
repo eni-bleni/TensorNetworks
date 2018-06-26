@@ -45,34 +45,41 @@ function blocks_to_mpo(block,L,D=Inf)
     return MPO(mpo)
 end
 
+function block_decimation(TL,TR,block,D,dir=:right)
+    s = size(block)
+    d = Int(sqrt(s[1]))
+    block = reshape(block,d,d,d,d)
+    @tensor tensor[:] := TL[-1,1,2]*block[-2,-3,1,3]*TR[2,3,-4]
+    TL,TR = split(tensor,D,dir)
+    if dir ==:right
+        TR,R,DB = LRcanonical(TR,-1)
+    elseif dir==:left
+        TL,R,DB = LRcanonical(TL,1)
+    end
+    return TL,TR,R
+end
+
 function tebd_sweep(mps,blocks,D=Inf)
     L = length(mps)
     offset = iseven(L) ? 1 : 0
+    mpo = typeof(mps)==MPO ? true : false
+    # mps = makeCanonical(mps,1)
     for i = 1:2:L-1
         block = blocks(i,L)
-        s = size(block)
-        d = Int(sqrt(s[1]))
-        block = reshape(block,d,d,d,d)
-        @tensor tensor[:] := mps[i][-1,1,2]*block[-2,-3,1,3]*mps[i+1][2,3,-4]
-        mps[i], mps[i+1] = split(tensor,D,:right)
-        mps[i+1],R,DB = LRcanonical(mps[i+1],-1) # leftcanonicalize current sites
+        mps[i], mps[i+1], R = block_decimation(mps[i],mps[i+1],block,D,:right)
         if i < L-1
             @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
         end
     end
-    for i = (L-offset):-2:2
+    mps[L],R,DB = LRcanonical(mps[L],1)
+    @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
+    for i = (L-offset):-2:3
         block = blocks(i-1,L)
-        s = size(block)
-        d = Int(sqrt(s[1]))
-        block = reshape(block,d,d,d,d)
-        @tensor tensor[:] := mps[i-1][-1,1,2]*block[-2,-3,1,3]*mps[i][2,3,-4]
-        mps[i-1], mps[i] = split(tensor,D,:left)
-
-        mps[i-1],R,DB = LRcanonical(mps[i-1],1) # rightcanonicalize current sites
-        if i>2
-            @tensor mps[i-2][:] := mps[i-2][-1,-2,1]*R[1,-3]
-        end
+        mps[i-1], mps[i],R = block_decimation(mps[i-1],mps[i],block,D,:left)
+        @tensor mps[i-2][:] := mps[i-2][-1,-2,1]*R[1,-3]
     end
+    # mps = makeCanonical(mps)
+    mps[1],R,DB = LRcanonical(mps[1],1) # leftcanonicalize current sites
     return mps
 end
 
@@ -88,6 +95,7 @@ function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf,method=:m
     L = length(mps)
     nops = length(quench.operators)
     exps = Array{Complex128,2}(nops+1,steps)
+    mps = makeCanonical(mps,1)
     for counter = 1:steps
         t = counter*time/steps
         if method==:mpo
@@ -103,9 +111,10 @@ function time_evolve_simpler(mps, quench; time=:req, steps=:req, D=Inf,method=:m
             if k==0
                 exps[k+1,counter] = t
             else
-                exps[k+1,counter] = trace(mps'*(quench.operators[k](t)*mps))
+                @time exps[k+1,counter] = trace(mps'*(quench.operators[k](t)*mps))
             end
         end
+        println(counter)
     end
     return mps,exps
 end
