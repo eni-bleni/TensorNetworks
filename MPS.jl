@@ -386,17 +386,19 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         mpsguess = reshape(mps[j],prod(szmps))
         HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
         hefflin = LinearMap{Complex128}(HeffFun, prod(szmps),ishermitian=true)
-        proj = eye(size(hefflin)[1])
+        proj = 1
         for k = 1:length(orth)
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
             so = size(orthTensor)
             orthvector = reshape(orthTensor,1,prod(so))
             orthvector = orthvector/norm(orthvector)
             tmp = [zeros(prod(so)) nullspace(orthvector)]
-            proj = proj*tmp*tmp'
+            proj = LinearMap(proj*LinearMap(tmp)*LinearMap(tmp'),ishermitian=true)
         end
-        hefflin = proj * hefflin * proj'
-        mpsguess = proj*mpsguess
+        if orth!=nothing
+            hefflin = LinearMap(proj * hefflin * proj',ishermitian=true)
+            mpsguess = proj*mpsguess
+        end
 
         if size(hefflin)[1] < 10
             evals, evecs = eig(Base.full(hefflin))
