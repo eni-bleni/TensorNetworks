@@ -581,7 +581,7 @@ function traceMPOprod(mpo1,mpo2,n=1)
         F = Array{Complex64}(1,1,1,1,1,1)
         F[1,1,1,1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4,-5,-6] := F[-1,-2,-3,1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,5,6,-5])*conj(mpo2[i][3,6,4,-6])
+            @tensor F[-1,-2,-3,-4,-5,-6] := F[-1,-2,-3,1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
         end
         return F[1,1,1,1,1,1]
     else
@@ -771,7 +771,7 @@ function SubTraceDistance(MPO,MPS,l)
                     C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
                 end
     end
-    return A[1,1] + B1[1,1,1] + B2[1,1,1] + C[1,1,1,1]
+    return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
 end
 
 

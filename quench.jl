@@ -5,8 +5,8 @@ using PyPlot
 println("\n---quench.jl------------------------------------")
 
 ## parameters for the spin chain:
-latticeSize = 10
-maxBondDim = [20, 40, 80]
+latticeSize = 50
+maxBondDim = [100]
 d = 2
 prec = 1e-8
 
@@ -185,11 +185,18 @@ end
 
 ## PLOTTING and SAVING
 figure(1)
-xlabel("time")
-ylabel("energy")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$E(t)\$")
+title("energy")
 legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
 savefig("figures/energy.pdf")
-writedlm("data/quench/energy.txt", energy_all)
+open("data/quench/energy.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/energy.txt", "a") do f
+    writedlm(f, energy_all)
+end
 
 # figure(2)
 # xlabel("time")
@@ -198,16 +205,31 @@ writedlm("data/quench/energy.txt", energy_all)
 # writedlm("data/quench/entanglement.txt", entropy_all)
 
 figure(3)
-xlabel("time")
-ylabel("magnetization")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
+title("magnetization")
 savefig("figures/magnetization.pdf")
-writedlm("data/quench/magnetization.txt", magnetization_all)
+open("data/quench/magnetization.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/magnetization.txt", "a") do f
+    writedlm(f, magnetization_all)
+end
+
 
 figure(4)
-xlabel("time")
-ylabel("correlation function")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
+title("correlation function")
 savefig("figures/corr_fct.pdf")
-writedlm("data/quench/corr_fct.txt", corr_fct_all)
+open("data/quench/corr_fct.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/corr_fct.txt", "a") do f
+    writedlm(f, corr_fct_all)
+end
 
 # figure(5)
 # xlabel("time")
