@@ -165,10 +165,15 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
             W = reshape(W, (d,d,d,d))
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D, -1)
 			# preserve canonical structure:
-            if mpo_to_mps_trafo # brute force, but works easily for mpo
-                MPS.makeCanonical(mps,i+2)
-            else # more efficiently for pure mps
+            if mpo_to_mps_trafo
+                smpo = MPS.mpo_to_mps(mps)
                 mps[i+1],R,DB = MPS.LRcanonical(mps[i+1],-1) # leftcanonicalize current sites
+                if i < L-1 || odd_length
+                    @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
+                end
+                MPS.mps_to_mpo(mps,smpo)
+            else
+                mps[i+1],R,DB = MPS.LRcanonical(mps[i+1],-1)
                 if i < L-1 || odd_length
                     @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
                 end
@@ -176,8 +181,13 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         end
 
         ## ************ left sweep over even sites
-        if !mpo_to_mps_trafo
+        if mpo_to_mps_trafo
+            smpo = MPS.mpo_to_mps(mps)
             mps[L],R,DB = MPS.LRcanonical(mps[L],1) # rightcanonicalize at right end
+            @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
+            MPS.mps_to_mpo(mps,smpo)
+        else
+            mps[L],R,DB = MPS.LRcanonical(mps[L],1)
             @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
         end
         for i = even_start:-2:2
@@ -186,14 +196,21 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D, 1)
 			# preserve canonical structure:
             if mpo_to_mps_trafo
-                MPS.makeCanonical(mps,i-2)
-            else
+                smpo = MPS.mpo_to_mps(mps)
                 mps[i],R,DB = MPS.LRcanonical(mps[i],1) # rightcanonicalize current sites
+                @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
+                MPS.mps_to_mpo(mps,smpo)
+            else
+                mps[i],R,DB = MPS.LRcanonical(mps[i],1)
                 @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
             end
         end
-        if !mpo_to_mps_trafo
+        if mpo_to_mps_trafo
+            smpo = MPS.mpo_to_mps(mps)
             mps[1],R,DB = MPS.LRcanonical(mps[1],1) # rightcanonicalize at left end
+            MPS.mps_to_mpo(mps,smpo)
+        else
+            mps[1],R,DB = MPS.LRcanonical(mps[1],1)
         end
 
         ## expectation values:
@@ -210,12 +227,13 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                     J, h, g = evolveIsingParams(J0, h0, g0, time)
                     hamiltonian = MPS.IsingMPO(L, J, h, g)
     				rho = MPS.multiplyMPOs(mps,mps)
-                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian))] # = E
-                    # @time expect[counter,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2))] # = E ## not yet correct result
+                    tr_rho = MPS.traceMPOprod(mps,mps)
+                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian)/tr_rho)] # = E
+                    # @time expect[counter,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## not yet correct result
     				magnet_pos = Int(floor(L/2)) # position for magnetization op in spin chain
-    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L))]
+    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L))/tr_rho]
                     spin_pos = [[sz,Int(floor(L/4))], [sz,Int(floor(3/4*L))]] # position of spins in chain for correlation fct
-                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators(spin_pos,L))]
+                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators(spin_pos,L))/tr_rho]
                     # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
                 end
             elseif mpo == "Heisenberg"

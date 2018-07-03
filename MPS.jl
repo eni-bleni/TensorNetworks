@@ -714,6 +714,31 @@ end
 
 
 """
+    ```mpo_to_mps(mpo)```"""
+function mpo_to_mps(mpo)
+    L = length(mpo)
+    smpo = Array{Any}(L)
+    for i = 1:L
+        smpo[i] = size(mpo[i])
+        mpo[i] = reshape(mpo[i], smpo[i][1],smpo[i][2]*smpo[i][3],smpo[i][4])
+    end
+
+    return smpo
+end
+
+
+"""
+    ```mps_to_mpo(mps, smpo)```"""
+function mps_to_mpo(mps, smpo)
+    ## smpo[i] = size(mpo[i])
+    L = length(mps)
+    for i = 1:L
+        mps[i] = reshape(mps[i], smpo[i][1],smpo[i][2],smpo[i][3],smpo[i][4])
+    end
+end
+
+
+"""
 constructs |Psi><Psi| as an MPO
 """
 function pureDensityMatrix(mps)

@@ -130,12 +130,13 @@ for beta_th in total_time_thermal
         IDmpo = MPS.IdentityMPO(latticeSize,d)
         init_params = (J0, h0, g0)
         @time TEBD.time_evolve_mpoham(IDmpo,thermalIsing,beta_th,steps,maxD,0,init_params,ETH)
+        println("trace rho_th(0) = ", MPS.traceMPOprod(IDmpo,IDmpo))
         # rho = MPS.multiplyMPOs(IDmpo,IDmpo) # --> IDmpo = exp[-beta/2 H]
 
         ## thermal quench:
         init_params = (J0, h0, g0)
         @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxD,0,init_params,ETH,"Isingthermal")
-
+        println("trace rho_th(t_max) = ", MPS.traceMPOprod(IDmpo,IDmpo))
 
         ## Ising evolution:
         # init_params = (J0, h0, g0)
