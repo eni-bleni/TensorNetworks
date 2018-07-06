@@ -24,7 +24,7 @@ end
 function evolveIsingParams(J0, h0, g0, time)
     ### time evolution of all quench parameters
     J = J0
-    h = h0 + 0.01*exp(-3(time-2)^2)
+    h = h0 + exp(-3(time-2)^2)
     g = g0
 
     return J, h, g
@@ -226,15 +226,15 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
     				J0, h0, g0 = params
                     J, h, g = evolveIsingParams(J0, h0, g0, time)
                     hamiltonian = MPS.IsingMPO(L, J, h, g)
-    				rho = MPS.multiplyMPOs(mps,mps)
-                    tr_rho = MPS.traceMPOprod(mps,mps)
-                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian)/tr_rho)] # = E
-                    # @time expect[counter,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## not yet correct result
+    				# rho = MPS.multiplyMPOs(mps,mps)
+                    tr_rho = real(MPS.traceMPO(mps,2))
+                    # expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian)/tr_rho)] # = E
+                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## seems to work
     				magnet_pos = Int(floor(L/2)) # position for magnetization op in spin chain
-    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L))/tr_rho]
+    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators([[sx,magnet_pos]],L),2)/tr_rho]
                     spin_pos = [[sz,Int(floor(L/4))], [sz,Int(floor(3/4*L))]] # position of spins in chain for correlation fct
-                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(rho,MPS.MpoFromOperators(spin_pos,L))/tr_rho]
-                    # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
+                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators(spin_pos,L),2)/tr_rho]
+                    # corr_length[Int(floor(counter/increment))+1,:] = [time MPS.correlation_length(rho,d)[2]]
                 end
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
