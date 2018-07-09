@@ -24,7 +24,7 @@ end
 function evolveIsingParams(J0, h0, g0, time)
     ### time evolution of all quench parameters
     J = J0
-    h = h0 + exp(-3(time-2)^2)
+    h = h0 + 0.1*exp(-20(time-0.5)^2)
     g = g0
 
     return J, h, g
@@ -84,17 +84,13 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
 
     # absorb time evolution gate W into Tl and Tr
     @tensor theta[-1,-2,-3,-4] := Tl[-1,2,3]*W[2,4,-2,-3]*Tr[3,4,-4] # = (D1l,d,d,D2r)
-    # println("theta", typeof(theta))
     theta = reshape(theta, D1l*d,d*D2r)
     U,S,V = svd(theta, thin=true)
-    # println(typeof(theta))
-    # SVD = svds(theta, nsv=min(Dmax,D1l*d,d*D2r))[1]
-    # println("svds")
+    V = V'
+    # SVD = svds(theta, nsv=min(Dmax,D1l*d,d*D2r)-1)[1] # takes (way) longer !?
     # U = SVD[:U]
     # S = SVD[:S]
     # V = SVD[:Vt]
-    # println("svd")
-    V = V'
     D1 = size(S)[1] # number of singular values
 
     if D1 <= Dmax
@@ -115,7 +111,6 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
             Tr = reshape(V, Dmax,d,D2r)
         end
     end
-    # println("trunc")
 
     if length(stl)==4
         Tl = permutedims(reshape(Tl, stl[1],stl[3],stl[2],min(D1,Dmax)), [1,3,2,4])
