@@ -749,7 +749,7 @@ function SubTraceDistance(MPO,MPS,l)
                     C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
                 end
     end
-    return A[1,1] + B1[1,1,1] + B2[1,1,1] + C[1,1,1,1]
+    return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
 end
 
 
