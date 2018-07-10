@@ -393,7 +393,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             orthvector = reshape(orthTensor,1,prod(so))
             orthvector = orthvector/norm(orthvector)
             tmp = [zeros(prod(so)) nullspace(orthvector)]
-            proj = LinearMap(proj*LinearMap(tmp)*LinearMap(tmp'),ishermitian=true)
+            proj = LinearMap(proj*LinearMap(tmp')*LinearMap(tmp),ishermitian=true)
         end
         if orth!=nothing
             hefflin = LinearMap(proj * hefflin * proj',ishermitian=true)
