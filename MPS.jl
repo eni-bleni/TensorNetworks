@@ -552,18 +552,44 @@ function traceMPO(mpo,n=1)
         F = Array{Complex64}(1,1,1,1)
         F[1,1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,4,3,-4])
+            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,3,4,-4])
         end
         return F[1,1,1,1]
     elseif n == 4
         F = Array{Complex64}(1,1,1,1,1,1,1,1)
         F[1,1,1,1,1,1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4,-5,-6,-7,-8] := F[-1,-2,-3,-4,1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,6,7,-6])*conj(mpo[i][3,7,8,-7])*mpo[i][4,8,5,-8]
+            @tensor F[-1,-2,-3,-4,-5,-6,-7,-8] := F[-1,-2,-3,-4,1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,7,6,-6])*conj(mpo[i][3,8,7,-7])*mpo[i][4,8,5,-8]
         end
         return F[1,1,1,1,1,1,1,1]
     else
-        println("ERROR: choose n=1,2 or 4 in traceMPO(mpo,n=1)")
+        println("ERROR: choose n=1,2,4 in traceMPO(mpo,n=1)")
+        return "nan"
+    end
+end
+
+
+"""
+calculates Tr(mpo1^n * mpo2) for n=1,2
+"""
+function traceMPOprod(mpo1,mpo2,n=1)
+    L = length(mpo1)
+    if n == 1
+        F = Array{Complex64}(1,1,1,1)
+        F[1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,3,4,-4])
+        end
+        return F[1,1,1,1]
+    elseif n == 2
+        F = Array{Complex64}(1,1,1,1,1,1)
+        F[1,1,1,1,1,1] = 1
+        for i = 1:L
+            @tensor F[-1,-2,-3,-4,-5,-6] := F[-1,-2,-3,1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
+        end
+        return F[1,1,1,1,1,1]
+    else
+        println("ERROR: choose n=1,2 in traceMPOprod(mpo1,mpo2,n=1)")
         return "nan"
     end
 end
@@ -689,6 +715,31 @@ function makeCanonical(mps,n=0)
     end
 end
 
+
+
+"""
+    ```mpo_to_mps(mpo)```"""
+function mpo_to_mps(mpo)
+    L = length(mpo)
+    smpo = Array{Any}(L)
+    for i = 1:L
+        smpo[i] = size(mpo[i])
+        mpo[i] = reshape(mpo[i], smpo[i][1],smpo[i][2]*smpo[i][3],smpo[i][4])
+    end
+
+    return smpo
+end
+
+
+"""
+    ```mps_to_mpo(mps, smpo)```"""
+function mps_to_mpo(mps, smpo)
+    ## smpo[i] = size(mpo[i])
+    L = length(mps)
+    for i = 1:L
+        mps[i] = reshape(mps[i], smpo[i][1],smpo[i][2],smpo[i][3],smpo[i][4])
+    end
+end
 
 
 """

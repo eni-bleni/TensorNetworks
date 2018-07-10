@@ -6,7 +6,7 @@ println("\n---quench.jl------------------------------------")
 
 ## parameters for the spin chain:
 latticeSize = 10
-maxBondDim = [10, 20, 40, 80]
+maxBondDim = [20]
 d = 2
 prec = 1e-8
 
@@ -22,9 +22,10 @@ Jz0 = 1.0
 hx0 = 1.0
 
 ## TEBD parameters:
-total_time_thermal = -im*[1.0]/2#, 1.0, 0.5, 0.1, 0.01]/2 # -im*total_time_thermal  for imag time evol
-total_time_quench = 20.0
-steps = 2000
+total_time_thermal = -im*[0.5]/2 # -im*total_time_thermal  for imag time evol
+total_time_quench = 8.0
+steps = 500
+increment = 2 # stepsize > 1 after which physical quantities are calculated
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 # define Pauli matrices:
@@ -129,18 +130,23 @@ for beta_th in total_time_thermal
         ## thermal state MPO:
         IDmpo = MPS.IdentityMPO(latticeSize,d)
         init_params = (J0, h0, g0)
-        @time TEBD.time_evolve_mpoham(IDmpo,thermalIsing,beta_th,steps,maxD,0,init_params,ETH)
+        @time TEBD.time_evolve_mpoham(IDmpo,thermalIsing,beta_th,steps,maxD,1,0,init_params,ETH)
+        println("trace rho_th(0) = ", MPS.traceMPO(IDmpo,2))
+        # println("trace rho_th(0) = ", MPS.traceMPOprod(IDmpo,IDmpo))
+        # println("trace rho_th(0) = ", MPS.traceMPO(MPS.multiplyMPOs(IDmpo,IDmpo)))
         # rho = MPS.multiplyMPOs(IDmpo,IDmpo) # --> IDmpo = exp[-beta/2 H]
 
         ## thermal quench:
         init_params = (J0, h0, g0)
-        @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxD,0,init_params,ETH,"Isingthermal")
-
+        @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxD,increment,0,init_params,ETH,"Isingthermal")
+        println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
+        # println("trace rho_th(t_max) = ", MPS.traceMPOprod(IDmpo,IDmpo))
+        # println("trace rho_th(t_max) = ", MPS.traceMPO(MPS.multiplyMPOs(IDmpo,IDmpo)))
 
         ## Ising evolution:
         # init_params = (J0, h0, g0)
         # println("Norm: ", MPS.MPSnorm(mps_evol))
-        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxD,entropy_cut,init_params,ETH,"Ising")
+        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxD,1,entropy_cut,init_params,ETH,"Ising")
         # println("Norm: ", MPS.MPSnorm(mps_evol))
         # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -148,7 +154,7 @@ for beta_th in total_time_thermal
         ## Heisenberg evolution:
         # init_params = (Jx0, Jy0, Jz0, hx0)
         # println("Norm: ", MPS.MPSnorm(mps_evol))
-        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxD,entropy_cut,init_params,ETH,"Heisenberg")
+        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxD,1,entropy_cut,init_params,ETH,"Heisenberg")
         # println("Norm: ", MPS.MPSnorm(mps_evol))
         # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -185,11 +191,18 @@ end
 
 ## PLOTTING and SAVING
 figure(1)
-xlabel("time")
-ylabel("energy")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$E(t)\$")
+title("energy")
 legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
 savefig("figures/energy.pdf")
-writedlm("data/quench/energy.txt", energy_all)
+open("data/quench/energy.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/energy.txt", "a") do f
+    writedlm(f, energy_all)
+end
 
 # figure(2)
 # xlabel("time")
@@ -198,16 +211,31 @@ writedlm("data/quench/energy.txt", energy_all)
 # writedlm("data/quench/entanglement.txt", entropy_all)
 
 figure(3)
-xlabel("time")
-ylabel("magnetization")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
+title("magnetization")
 savefig("figures/magnetization.pdf")
-writedlm("data/quench/magnetization.txt", magnetization_all)
+open("data/quench/magnetization.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/magnetization.txt", "a") do f
+    writedlm(f, magnetization_all)
+end
+
 
 figure(4)
-xlabel("time")
-ylabel("correlation function")
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
+title("correlation function")
 savefig("figures/corr_fct.pdf")
-writedlm("data/quench/corr_fct.txt", corr_fct_all)
+open("data/quench/corr_fct.txt", "w") do f
+    write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+    write(f, string("t \t  D= ", maxBondDim, "\n"))
+end
+open("data/quench/corr_fct.txt", "a") do f
+    writedlm(f, corr_fct_all)
+end
 
 # figure(5)
 # xlabel("time")

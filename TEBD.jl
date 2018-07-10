@@ -24,7 +24,7 @@ end
 function evolveIsingParams(J0, h0, g0, time)
     ### time evolution of all quench parameters
     J = J0
-    h = h0 + exp(-3(time-2)^2)
+    h = h0 + 0.1*exp(-20(time-0.5)^2)
     g = g0
 
     return J, h, g
@@ -84,17 +84,13 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
 
     # absorb time evolution gate W into Tl and Tr
     @tensor theta[-1,-2,-3,-4] := Tl[-1,2,3]*W[2,4,-2,-3]*Tr[3,4,-4] # = (D1l,d,d,D2r)
-    # println("theta", typeof(theta))
     theta = reshape(theta, D1l*d,d*D2r)
     U,S,V = svd(theta, thin=true)
-    # println(typeof(theta))
-    # SVD = svds(theta, nsv=min(Dmax,D1l*d,d*D2r))[1]
-    # println("svds")
+    V = V'
+    # SVD = svds(theta, nsv=min(Dmax,D1l*d,d*D2r)-1)[1] # takes (way) longer !?
     # U = SVD[:U]
     # S = SVD[:S]
     # V = SVD[:Vt]
-    # println("svd")
-    V = V'
     D1 = size(S)[1] # number of singular values
 
     if D1 <= Dmax
@@ -115,7 +111,6 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
             Tr = reshape(V, Dmax,d,D2r)
         end
     end
-    # println("trunc")
 
     if length(stl)==4
         Tl = permutedims(reshape(Tl, stl[1],stl[3],stl[2],min(D1,Dmax)), [1,3,2,4])
@@ -126,7 +121,7 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
 end
 
 
-function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, params, eth, mpo=nothing)
+function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy_cut, params, eth, mpo=nothing)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -149,11 +144,11 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         MPS.makeCanonical(mps)
     end
 
-    expect = Array{Any}(steps,2)
-    entropy = Array{Any}(steps,2)
-	magnetization = Array{Any}(steps,2)
-    correlation = Array{Any}(steps,2)
-    corr_length = Array{Any}(steps,2)
+    expect        = Array{Any}(Int(steps/increment)+1,2)
+    entropy       = Array{Any}(Int(steps/increment)+1,2)
+	magnetization = Array{Any}(Int(steps/increment)+1,2)
+    correlation   = Array{Any}(Int(steps/increment)+1,2)
+    corr_length   = Array{Any}(Int(steps/increment)+1,2)
 
     for counter = 1:steps
         time = counter*total_time/steps
@@ -164,10 +159,15 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
             W = reshape(W, (d,d,d,d))
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D, -1)
 			# preserve canonical structure:
-            if mpo_to_mps_trafo # brute force, but works easily for mpo
-                MPS.makeCanonical(mps,i+2)
-            else # more efficiently for pure mps
+            if mpo_to_mps_trafo
+                smpo = MPS.mpo_to_mps(mps)
                 mps[i+1],R,DB = MPS.LRcanonical(mps[i+1],-1) # leftcanonicalize current sites
+                if i < L-1 || odd_length
+                    @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
+                end
+                MPS.mps_to_mpo(mps,smpo)
+            else
+                mps[i+1],R,DB = MPS.LRcanonical(mps[i+1],-1)
                 if i < L-1 || odd_length
                     @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
                 end
@@ -175,8 +175,13 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         end
 
         ## ************ left sweep over even sites
-        if !mpo_to_mps_trafo
+        if mpo_to_mps_trafo
+            smpo = MPS.mpo_to_mps(mps)
             mps[L],R,DB = MPS.LRcanonical(mps[L],1) # rightcanonicalize at right end
+            @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
+            MPS.mps_to_mpo(mps,smpo)
+        else
+            mps[L],R,DB = MPS.LRcanonical(mps[L],1)
             @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
         end
         for i = even_start:-2:2
@@ -185,14 +190,21 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
             mps[i], mps[i+1] = block_decimation(W, mps[i], mps[i+1], D, 1)
 			# preserve canonical structure:
             if mpo_to_mps_trafo
-                MPS.makeCanonical(mps,i-2)
-            else
+                smpo = MPS.mpo_to_mps(mps)
                 mps[i],R,DB = MPS.LRcanonical(mps[i],1) # rightcanonicalize current sites
+                @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
+                MPS.mps_to_mpo(mps,smpo)
+            else
+                mps[i],R,DB = MPS.LRcanonical(mps[i],1)
                 @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
             end
         end
-        if !mpo_to_mps_trafo
+        if mpo_to_mps_trafo
+            smpo = MPS.mpo_to_mps(mps)
             mps[1],R,DB = MPS.LRcanonical(mps[1],1) # rightcanonicalize at left end
+            MPS.mps_to_mpo(mps,smpo)
+        else
+            mps[1],R,DB = MPS.LRcanonical(mps[1],1)
         end
 
         ## expectation values:
@@ -203,16 +215,21 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
                 hamiltonian = MPS.IsingMPO(L, J, h, g)
                 expect[counter,:] = [time MPS.mpoExpectation(mps,hamiltonian)]
 			elseif mpo == "Isingthermal"
-				J0, h0, g0 = params
-                J, h, g = evolveIsingParams(J0, h0, g0, time)
-                hamiltonian = MPS.IsingMPO(L, J, h, g)
-				rho = MPS.multiplyMPOs(mps,mps)
-                expect[counter,:] = [time real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))]
-				magnet_pos = Int(round(L/2)) # position for magnetization op in spin chain
-				magnetization[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators([[sx,magnet_pos]],L)))]
-                spin_pos = [[sz,Int(round(L/4))], [sz,Int(round(3/4*L))]] # position of spins in chain for correlation fct
-                correlation[counter,:] = [time MPS.traceMPO(MPS.multiplyMPOs(rho,MPS.MpoFromOperators(spin_pos,L)))]
-                # corr_length[counter,:] = [time MPS.correlation_length(rho,d)[2]]
+                if counter==1 || counter % increment == 0
+                    println("step ",counter," / ",steps)
+    				J0, h0, g0 = params
+                    J, h, g = evolveIsingParams(J0, h0, g0, time)
+                    hamiltonian = MPS.IsingMPO(L, J, h, g)
+    				# rho = MPS.multiplyMPOs(mps,mps)
+                    tr_rho = real(MPS.traceMPO(mps,2))
+                    # expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian)/tr_rho)] # = E
+                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## seems to work
+    				magnet_pos = Int(floor(L/2)) # position for magnetization op in spin chain
+    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators([[sx,magnet_pos]],L),2)/tr_rho]
+                    spin_pos = [[sz,Int(floor(L/4))], [sz,Int(floor(3/4*L))]] # position of spins in chain for correlation fct
+                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators(spin_pos,L),2)/tr_rho]
+                    # corr_length[Int(floor(counter/increment))+1,:] = [time MPS.correlation_length(rho,d)[2]]
+                end
             elseif mpo == "Heisenberg"
                 Jx0, Jy0, Jz0, hx0 = params
                 Jx, Jy, Jz, hx = evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
@@ -232,7 +249,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
 		if eth[1] == true
 			E1, hamiltonian = real(eth[2]), eth[3]
 			rho = MPS.multiplyMPOs(mps,mps)
-			E_thermal = real(MPS.traceMPO(MPS.multiplyMPOs(rho,hamiltonian)))
+			E_thermal = real(MPS.traceMPOprod(rho,hamiltonian))
 			if E_thermal <= E1
 				return E_thermal, real(time*1im) # im*time = beta/2
 			end
