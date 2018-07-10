@@ -121,7 +121,7 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
 end
 
 
-function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, params, eth, mpo=nothing)
+function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy_cut, params, eth, mpo=nothing)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -144,7 +144,6 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, entropy_cut, param
         MPS.makeCanonical(mps)
     end
 
-    increment = 10 # stepsize > 1 after which physical quantities are calculated
     expect        = Array{Any}(Int(steps/increment)+1,2)
     entropy       = Array{Any}(Int(steps/increment)+1,2)
 	magnetization = Array{Any}(Int(steps/increment)+1,2)

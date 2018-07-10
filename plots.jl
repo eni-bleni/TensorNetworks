@@ -1,53 +1,10 @@
+using layout
 using PyPlot
-using PyCall
-@pyimport matplotlib.transforms as mpltrafo
-
-
-
-### LAYOUT choices:
-
-function nice_ticks()
-    ax = subplot(111)
-    ax[:get_xaxis]()[:set_tick_params](direction="in", bottom=1, top=1)
-    ax[:get_yaxis]()[:set_tick_params](direction="in", left=1, right=1)
-
-    for l in ax[:get_xticklines]()
-        l[:set_markersize](8)
-        l[:set_markeredgewidth](2.0)
-    end
-    for l in ax[:get_yticklines]()
-        l[:set_markersize](8)
-        l[:set_markeredgewidth](2.0)
-    end
-    for l in ax[:yaxis][:get_minorticklines]()
-        l[:set_markersize](4)
-        l[:set_markeredgewidth](1.5)
-    end
-    for l in ax[:xaxis][:get_minorticklines]()
-        l[:set_markersize](4)
-        l[:set_markeredgewidth](1.5)
-    end
-
-    ax[:set_position](mpltrafo.Bbox([[0.16, 0.12], [0.95, 0.94]]))
-end
-
-linew = 2
-rc("font", size = 18) #fontsize of axis labels (numbers)
-rc("axes", labelsize = 20, lw = linew) #fontsize of axis labels (symbols)
-rc("lines", mew = 2, lw = linew, markeredgewidth = 2)
-rc("patch", ec = "k")
-rc("xtick.major", pad = 7)
-rc("ytick.major", pad = 7)
-
-PyCall.PyDict(matplotlib["rcParams"])["mathtext.fontset"] = "cm"
-PyCall.PyDict(matplotlib["rcParams"])["mathtext.rm"] = "serif"
-PyCall.PyDict(matplotlib["rcParams"])["figure.figsize"] = [8.0, 6.0]
-
 
 
 ### read out data:
 
-subfolder = "1e-1shortGauss_L50_beta0.5_J1_h1"
+subfolder = "1e-1shortdetailGauss_L50_beta0.5_J1_h1"
 
 E_mps, header = readdlm("data/quench/"*subfolder*"/energy.txt", header=true)
 magnetization_mps, header = readdlm("data/quench/"*subfolder*"/magnetization.txt", header=true)
@@ -82,21 +39,21 @@ xlabel("\$t\\, /\\, J \$")
 ylabel("\$E(t)\$")
 title("\$energy\$")
 legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
-nice_ticks()
+layout.nice_ticks()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(2)
 xlabel("\$t\\, /\\, J \$")
 ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
 title("\$magnetization\$")
-nice_ticks()
+layout.nice_ticks()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(3)
 xlabel("\$t\\, /\\, J \$")
 ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
 title("\$correlation\\, function\$")
-nice_ticks()
+layout.nice_ticks()
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 
@@ -111,7 +68,7 @@ if plot_comparison
     ylabel("\$E(t)\$")
     title("\$energy\$")
     legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
-    nice_ticks()
+    layout.nice_ticks()
     savefig("figures/"*subfolder*"/energy_comp.pdf")
 
     figure(5)
@@ -120,7 +77,7 @@ if plot_comparison
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
     title("\$magnetization\$")
-    nice_ticks()
+    layout.nice_ticks()
     savefig("figures/"*subfolder*"/magnetization_comp.pdf")
 
     figure(6)
@@ -129,7 +86,7 @@ if plot_comparison
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
     title("\$correlation\\, function\$")
-    nice_ticks()
+    layout.nice_ticks()
     savefig("figures/"*subfolder*"/corr_fct_comp.pdf")
 end
 

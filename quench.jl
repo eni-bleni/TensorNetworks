@@ -5,8 +5,8 @@ using PyPlot
 println("\n---quench.jl------------------------------------")
 
 ## parameters for the spin chain:
-latticeSize = 50
-maxBondDim = [50,100]
+latticeSize = 10
+maxBondDim = [20]
 d = 2
 prec = 1e-8
 
@@ -22,9 +22,10 @@ Jz0 = 1.0
 hx0 = 1.0
 
 ## TEBD parameters:
-total_time_thermal = -im*[0.5]/2#, 1.0, 0.5, 0.1, 0.01]/2 # -im*total_time_thermal  for imag time evol
-total_time_quench = 20.0
-steps = 1000
+total_time_thermal = -im*[0.5]/2 # -im*total_time_thermal  for imag time evol
+total_time_quench = 8.0
+steps = 500
+increment = 2 # stepsize > 1 after which physical quantities are calculated
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 # define Pauli matrices:
@@ -129,7 +130,7 @@ for beta_th in total_time_thermal
         ## thermal state MPO:
         IDmpo = MPS.IdentityMPO(latticeSize,d)
         init_params = (J0, h0, g0)
-        @time TEBD.time_evolve_mpoham(IDmpo,thermalIsing,beta_th,steps,maxD,0,init_params,ETH)
+        @time TEBD.time_evolve_mpoham(IDmpo,thermalIsing,beta_th,steps,maxD,1,0,init_params,ETH)
         println("trace rho_th(0) = ", MPS.traceMPO(IDmpo,2))
         # println("trace rho_th(0) = ", MPS.traceMPOprod(IDmpo,IDmpo))
         # println("trace rho_th(0) = ", MPS.traceMPO(MPS.multiplyMPOs(IDmpo,IDmpo)))
@@ -137,7 +138,7 @@ for beta_th in total_time_thermal
 
         ## thermal quench:
         init_params = (J0, h0, g0)
-        @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxD,0,init_params,ETH,"Isingthermal")
+        @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(IDmpo,isingQuench,total_time_quench,steps,maxD,increment,0,init_params,ETH,"Isingthermal")
         println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
         # println("trace rho_th(t_max) = ", MPS.traceMPOprod(IDmpo,IDmpo))
         # println("trace rho_th(t_max) = ", MPS.traceMPO(MPS.multiplyMPOs(IDmpo,IDmpo)))
@@ -145,7 +146,7 @@ for beta_th in total_time_thermal
         ## Ising evolution:
         # init_params = (J0, h0, g0)
         # println("Norm: ", MPS.MPSnorm(mps_evol))
-        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxD,entropy_cut,init_params,ETH,"Ising")
+        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,isingQuench,total_time_quench,steps,maxD,1,entropy_cut,init_params,ETH,"Ising")
         # println("Norm: ", MPS.MPSnorm(mps_evol))
         # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
@@ -153,7 +154,7 @@ for beta_th in total_time_thermal
         ## Heisenberg evolution:
         # init_params = (Jx0, Jy0, Jz0, hx0)
         # println("Norm: ", MPS.MPSnorm(mps_evol))
-        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxD,entropy_cut,init_params,ETH,"Heisenberg")
+        # @time energy, entropy, magnetization, corr_fct, corr_length = TEBD.time_evolve_mpoham(mps_evol,heisenbergQuench,total_time_quench,steps,maxD,1,entropy_cut,init_params,ETH,"Heisenberg")
         # println("Norm: ", MPS.MPSnorm(mps_evol))
         # println( "E/N = ", MPS.mpoExpectation(mps_evol,hamiltonian)/(latticeSize-1) )
 
