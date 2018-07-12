@@ -2,63 +2,41 @@ module TEBD
 using TensorOperations
 using MPS
 
-# define Pauli matrices
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
-
-function TwoSiteIsingHamiltonian(J,h,g)
-    ZZ = kron(sz, sz)
-    ZI = kron(sz, si)
-    IZ = kron(si, sz)
-    XI = kron(sx, si)
-    IX = kron(si, sx)
-    H = J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)
-    return H
+function isingHamBlocks(L,J,h,g)
+    blocks = Array{Any,1}(L)
+    for i=1:L
+        if i==1
+            blocks[i] = J*ZZ + h/2*(XI+2IX) + g/2*(ZI+2IZ)
+        elseif i==L-1
+            blocks[i] = J*ZZ + h/2*(2*XI+IX) + g/2*(2*ZI+IZ)
+        else
+            blocks[i] = J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)
+        end
+    end
+    return blocks
 end
 
-
-""" returns the Ising parameters after every time evolution step """
-function evolveIsingParams(J0, h0, g0, time)
-    ### time evolution of all quench parameters
-    J = J0
-    h = h0 + 0.1*exp(-20(time-0.5)^2)
-    g = g0
-
-    return J, h, g
+function heisenbergHamblocks(L,Jx, Jy, Jz, hx)
+    blocks = Array{Any,1}(L)
+    for i=1:L
+        if i==1
+            blocks[i] = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+2*IX)
+        elseif i==L-1
+            blocks[i] = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(2*XI+IX)
+        else
+            blocks[i] = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+IX)
+        end
+    end
+    return blocks
 end
-
-function TwoSiteHeisenbergHamiltonian(Jx,Jy,Jz,hx)
-    XX = kron(sx, sx)
-    YY = kron(sy, sy)
-    ZZ = kron(sz, sz)
-    XI = kron(sx, si)
-    IX = kron(si, sx)
-    H = Jx*XX + Jy*YY + Jz*ZZ + hx/2*(XI+IX)
-    return H
-end
-
-""" returns the Heisenberg parameters after every time evolution step """
-function evolveHeisenbergParams(Jx0, Jy0, Jz0, hx0, time)
-    ### time evolution of all quench parameters
-    Jx = Jx0
-    Jy = Jy0
-    Jz = Jz0
-    hx = hx0 + exp(-(time-2)^2)
-
-    return Jx, Jy, Jz, hx
-end
-
 
 function truncate_svd(U, S, V, D)
+    err = sum(S[D+1:end].^2)
     U = U[:, 1:D]
     S = S[1:D]
     V = V[1:D, :]
-    return U, S, V
+    return U, S, V, err
 end
-
 
 """ block_decimation(W, Tl, Tr, Dmax,dir)
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
@@ -94,6 +72,7 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
     D1 = size(S)[1] # number of singular values
 
     if D1 <= Dmax
+        error = 0
         if dir == -1
             Tl = reshape(U, D1l,d,D1)
             Tr = reshape(diagm(S)*V, D1,d,D2r)
@@ -102,7 +81,7 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
             Tr = reshape(V, D1,d,D2r)
         end
     else
-        U,S,V = truncate_svd(U,S,V,Dmax)
+        U,S,V, error = truncate_svd(U,S,V,Dmax)
         if dir == -1
             Tl = reshape(U, D1l,d,Dmax)
             Tr = reshape(diagm(S)*V, Dmax,d,D2r)
@@ -117,9 +96,8 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
         Tr = reshape(Tr, min(D1,Dmax),str[2],str[3],str[4])
     end
 
-    return Tl, Tr
+    return Tl, Tr, error
 end
-
 
 function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy_cut, params, eth, mpo=nothing)
     ### block = hamiltonian
@@ -143,12 +121,12 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
     if !mpo_to_mps_trafo && MPS.check_LRcanonical(mps[1],-1) # use rightcanonical mps as default input for sweeping direction
         MPS.makeCanonical(mps)
     end
-
-    expect        = Array{Any}(Int(steps/increment)+1,2)
-    entropy       = Array{Any}(Int(steps/increment)+1,2)
-	magnetization = Array{Any}(Int(steps/increment)+1,2)
-    correlation   = Array{Any}(Int(steps/increment)+1,2)
-    corr_length   = Array{Any}(Int(steps/increment)+1,2)
+    datalength = Int(ceil(steps/increment))
+    expect        = Array{Any}(datalength,2)
+    entropy       = Array{Any}(datalength,2)
+	magnetization = Array{Any}(datalength,2)
+    correlation   = Array{Any}(datalength,2)
+    corr_length   = Array{Any}(datalength,2)
 
     for counter = 1:steps
         time = counter*total_time/steps
@@ -223,11 +201,11 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
     				# rho = MPS.multiplyMPOs(mps,mps)
                     tr_rho = real(MPS.traceMPO(mps,2))
                     # expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(rho,hamiltonian)/tr_rho)] # = E
-                    expect[Int(floor(counter/increment))+1,:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## seems to work
+                    expect[Int(ceil(counter/increment)),:] = [time real(MPS.traceMPOprod(mps,hamiltonian,2)/tr_rho)] # = E ## seems to work
     				magnet_pos = Int(floor(L/2)) # position for magnetization op in spin chain
-    				magnetization[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators([[sx,magnet_pos]],L),2)/tr_rho]
+    				magnetization[Int(ceil(counter/increment)),:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators([[sx,magnet_pos]],L),2)/tr_rho]
                     spin_pos = [[sz,Int(floor(L/4))], [sz,Int(floor(3/4*L))]] # position of spins in chain for correlation fct
-                    correlation[Int(floor(counter/increment))+1,:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators(spin_pos,L),2)/tr_rho]
+                    correlation[Int(ceil(counter/increment)),:] = [time MPS.traceMPOprod(mps,MPS.MpoFromOperators(spin_pos,L),2)/tr_rho]
                     # corr_length[Int(floor(counter/increment))+1,:] = [time MPS.correlation_length(rho,d)[2]]
                 end
             elseif mpo == "Heisenberg"
@@ -259,5 +237,99 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
     return expect, entropy, magnetization, correlation, corr_length
 end
 
+function tebd_step(mps, hamblocks, dt, D)
+    d = size(mps[1])[2]
+    L = length(mps)
+    if isodd(L)
+        even_start = L-1
+        odd_length = true
+    else
+        even_start = L-2
+        odd_length = false
+    end
+    mpo_to_mps_trafo = false
+    if length(size(mps[1])) == 4 # control variable to make mps out of mpo
+        mpo_to_mps_trafo = true
+    end
+    if !mpo_to_mps_trafo && MPS.check_LRcanonical(mps[1],-1) # use rightcanonical mps as default input for sweeping direction
+        MPS.makeCanonical(mps)
+    end
+    total_error = 0
+    ## ************ right sweep over odd sites
+    for i = 1:2:L-1
+        W = expm(-1im*dt*hamblocks[i])
+        W = reshape(W, (d,d,d,d))
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, -1)
+        total_error += error
+        # preserve canonical structure:
+        if i < L-2
+            if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
+            mps[i+1],R,DB = MPS.LRcanonical(mps[i+1],-1)
+            @tensor mps[i+2][-1,-2,-3] := R[-1,1]*mps[i+2][1,-2,-3]
+            if mpo_to_mps_trafo MPS.mps_to_mpo(mps,smpo) end
+        end
+    end
+
+    ## ************ left sweep over even sites
+    if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
+        mps[L],R,DB = MPS.LRcanonical(mps[L],1) # rightcanonicalize at right end
+        @tensor mps[L-1][:] := mps[L-1][-1,-2,1]*R[1,-3]
+    if mpo_to_mps_trafo MPS.mps_to_mpo(mps,smpo) end
+
+    for i = even_start:-2:2
+        W = expm(-1im*dt*hamblocks[i])
+        W = reshape(W, (d,d,d,d))
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, 1)
+        total_error += error
+        # preserve canonical structure:
+        if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
+        mps[i],R,DB = MPS.LRcanonical(mps[i],1) # rightcanonicalize current sites
+        @tensor mps[i-1][:] := mps[i-1][-1,-2,1]*R[1,-3]
+        if mpo_to_mps_trafo MPS.mps_to_mpo(mps,smpo) end
+    end
+
+    if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
+        mps[1],R,DB = MPS.LRcanonical(mps[1],1) # rightcanonicalize at left end
+    if mpo_to_mps_trafo MPS.mps_to_mpo(mps,smpo) end
+
+    return total_error
+end
+
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0)
+    ### block = hamiltonian
+    ### use -im*total_time for imaginary time evolution
+    ### assumption: start with rightcanonical mps
+	### eth = (true,E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
+    stepsize = total_time/steps
+    nop = length(operators)
+    opvalues = Array{Any,2}(steps,1+nop)
+    err = Array{Any,1}(steps)
+    for counter = 1:steps
+        time = counter*total_time/steps
+        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D)
+        ## expectation values:
+        opvalues[counter,1] = time
+        for k = 1:nop
+            opvalues[counter,k+1] = MPS.traceMPOprod(mps,operators[k](time),2)
+        end
+
+        ## entanglement entropy:
+        if entropy_cut > 0
+            entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
+        end
+
+		## ETH calculations:
+		# if eth[1] == true
+		# 	E1, hamiltonian = real(eth[2]), eth[3]
+		# 	rho = MPS.multiplyMPOs(mps,mps)
+		# 	E_thermal = real(MPS.traceMPOprod(rho,hamiltonian))
+		# 	if E_thermal <= E1
+		# 		return E_thermal, real(time*1im) # im*time = beta/2
+		# 	end
+		# end
+    end
+
+    return opvalues, err
+end
 
 end

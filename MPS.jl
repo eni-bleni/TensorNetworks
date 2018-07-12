@@ -1,13 +1,18 @@
 module MPS
+export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX
 using TensorOperations
 using LinearMaps
 # define Pauli matrices
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
-
+const sx = [0 1; 1 0]
+const sy = [0 1im; -1im 0]
+const sz = [1 0; 0 -1]
+const si = [1 0; 0 1]
+const s0 = [0 0; 0 0]
+const ZZ = kron(sz, sz)
+const ZI = kron(sz, si)
+const IZ = kron(si, sz)
+const XI = kron(sx, si)
+const IX = kron(si, sx)
 
 """
 Returns the MPO for a 2-site Hamiltonian
@@ -442,7 +447,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
     return mps, E, var, -canonicity
 end
 
-
 function n_lowest_states(mps, hamiltonian, prec,n)
     states = []
     energies = []
@@ -453,7 +457,6 @@ function n_lowest_states(mps, hamiltonian, prec,n)
     end
     return states,energies
 end
-
 
 function initializeHLR(mps,mpo,HL,HR)
     L = length(mps)
@@ -542,26 +545,26 @@ calculates Tr(mpo^n) for n=1,2,4
 function traceMPO(mpo,n=1)
     L = length(mpo)
     if n == 1
+        F = Array{Complex64}(1)
+        F[1] = 1
+        for i = 1:L
+            @tensor F[-2] := F[1]*mpo[i][1,2,2,-2]
+        end
+        return F[1]
+    elseif n == 2
         F = Array{Complex64}(1,1)
         F[1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+            @tensor F[-3,-4] := F[1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,3,4,-4])
         end
         return F[1,1]
-    elseif n == 2
+    elseif n == 4
         F = Array{Complex64}(1,1,1,1)
         F[1,1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,3,4,-4])
+            @tensor F[-5,-6,-7,-8] := F[1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,7,6,-6])*conj(mpo[i][3,8,7,-7])*mpo[i][4,8,5,-8]
         end
         return F[1,1,1,1]
-    elseif n == 4
-        F = Array{Complex64}(1,1,1,1,1,1,1,1)
-        F[1,1,1,1,1,1,1,1] = 1
-        for i = 1:L
-            @tensor F[-1,-2,-3,-4,-5,-6,-7,-8] := F[-1,-2,-3,-4,1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,7,6,-6])*conj(mpo[i][3,8,7,-7])*mpo[i][4,8,5,-8]
-        end
-        return F[1,1,1,1,1,1,1,1]
     else
         println("ERROR: choose n=1,2,4 in traceMPO(mpo,n=1)")
         return "nan"
@@ -575,19 +578,19 @@ calculates Tr(mpo1^n * mpo2) for n=1,2
 function traceMPOprod(mpo1,mpo2,n=1)
     L = length(mpo1)
     if n == 1
-        F = Array{Complex64}(1,1,1,1)
-        F[1,1,1,1] = 1
+        F = Array{Complex64}(1,1)
+        F[1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,3,4,-4])
+            @tensor F[-3,-4] := F[1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,3,4,-4])
         end
-        return F[1,1,1,1]
+        return F[1,1]
     elseif n == 2
-        F = Array{Complex64}(1,1,1,1,1,1)
-        F[1,1,1,1,1,1] = 1
+        F = Array{Complex64}(1,1,1)
+        F[1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4,-5,-6] := F[-1,-2,-3,1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
+            @tensor F[-4,-5,-6] := F[1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
         end
-        return F[1,1,1,1,1,1]
+        return F[1,1,1]
     else
         println("ERROR: choose n=1,2 in traceMPOprod(mpo1,mpo2,n=1)")
         return "nan"
@@ -802,6 +805,5 @@ function SubTraceDistance(MPO,MPS,l)
     end
     return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
 end
-
 
 end
