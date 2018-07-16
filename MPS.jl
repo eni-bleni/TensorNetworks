@@ -542,28 +542,28 @@ calculates Tr(mpo^n) for n=1,2,4
 function traceMPO(mpo,n=1)
     L = length(mpo)
     if n == 1
+        F = Array{Complex64}(1)
+        F[1] = 1
+        for i = 1:L
+            @tensor F[-2] := F[1]*mpo[i][1,2,2,-2]
+        end
+        return F[1]
+    elseif n == 2
         F = Array{Complex64}(1,1)
         F[1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2] := F[-1,1]*mpo[i][1,2,2,-2]
+            @tensor F[-3,-4] := F[1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,3,4,-4])
         end
         return F[1,1]
-    elseif n == 2
+    elseif n == 4
         F = Array{Complex64}(1,1,1,1)
         F[1,1,1,1] = 1
         for i = 1:L
-            @tensor F[-1,-2,-3,-4] := F[-1,-2,1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,4,3,-4])
+            @tensor F[-5,-6,-7,-8] := F[1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,7,6,-6])*conj(mpo[i][3,8,7,-7])*mpo[i][4,8,5,-8]
         end
         return F[1,1,1,1]
-    elseif n == 4
-        F = Array{Complex64}(1,1,1,1,1,1,1,1)
-        F[1,1,1,1,1,1,1,1] = 1
-        for i = 1:L
-            @tensor F[-1,-2,-3,-4,-5,-6,-7,-8] := F[-1,-2,-3,-4,1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,6,7,-6])*conj(mpo[i][3,7,8,-7])*mpo[i][4,8,5,-8]
-        end
-        return F[1,1,1,1,1,1,1,1]
     else
-        println("ERROR: choose n=1,2 or 4 in traceMPO(mpo,n=1)")
+        println("ERROR: choose n=1,2,4 in traceMPO(mpo,n=1)")
         return "nan"
     end
 end
