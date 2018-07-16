@@ -31,7 +31,7 @@ function getTL(A,B)
         end
         return reshape(ret,prod(size(ret)))
     end
-    return LinearMap{Complex128}(TL, last(size(B))^2, first(size(A))^2)
+    return conj(LinearMap{Complex128}(TL, last(size(B))^2, first(size(A))^2))
 end
 function getTR(A,B)
     function TR(R)
@@ -101,9 +101,9 @@ end
 
 function lmeigs(T; args...)
     if prod(size(T))<10
-        return eig(Base.full(T);args...)
+        return eig(Base.full(T))
     else
-        return eigs(T;args...)
+        return eigs(T;args...,tol=1e-8)
     end
 end
 
@@ -119,41 +119,57 @@ function expectation(A,B,opA,opB)
     return Base.full(eL[1]^(-1)*(vL'*(TOR*vR))/(vL'*vR)[1])
 end
 
-function itebd(A, B, hamblock, total_time, steps, D, operators=[])
+function half_step(A,B,W,D;tol=0)
+    mpo = length(size(A))==4
+    X,Y = getChol(A,B)
+    if mpo
+        @tensor A[:] := X[-1,2]*A[2,-2,-3,-4]
+        @tensor B[:] := Y[-4,1]*B[-1,-2,-3,1]
+    else
+        @tensor A[:] := X[-1,2]*A[2,-2,-3]
+        @tensor B[:] := Y[-3,1]*B[-1,-2,1]
+    end
+    A, B, err = TEBD.block_decimation(W, A, B, D,tol=tol)
+    if mpo
+        @tensor A[:] := inv(X)[-1,2]*A[2,-2,-3,-4]
+        @tensor B[:] := inv(Y)[-4,1]*B[-1,-2,-3,1]
+    else
+        @tensor A[:] := inv(X)[-1,2]*A[2,-2,-3]
+        @tensor B[:] := inv(Y)[-3,1]*B[-1,-2,1]
+    end
+    return A,B,err
+end
+
+function itebd(A, B, hamblock, total_time, steps, D, operators=[];tol=0,increment=1)
     dt = total_time/steps
     nop = length(operators)
     opvalues = Array{Any,2}(steps,1+nop)
     total_err = zeros(steps)
     sA = size(A)
     d = sA[2]
+    datacounter=0
     for i = 1:steps
+        print(i," ", size(A)[1], " ",)
         time = dt*(i-1)
-        total_error = 0
         W = expm(-1im*dt*hamblock(time))
         W = reshape(W, (d,d,d,d))
-        # X,Y = getChol(A,B)
-        # @tensor A[:] := X[2,-1]*A[2,-2,-3]
-        # @tensor B[:] := Y[1,-3]*B[-1,-2,1]
-        A, B, err = TEBD.block_decimation(W, A, B, D, -1)
-        total_err[i] += err
-        # @tensor A[:] := inv(X)[2,-1]*A[2,-2,-3]
-        # @tensor B[:] := inv(Y)[1,-3]*B[-1,-2,1]
+        A,B,err=half_step(A,B,W,D,tol=tol)
+        total_err[i]+=err
+        B,A,err=half_step(B,A,W,D,tol=tol)
+        total_err[i]+=err
 
-        # X,Y = getChol(B,A)
-        # @tensor B[:] := X[2,-1]*B[2,-2,-3]
-        # @tensor A[:] := Y[1,-3]*A[-1,-2,1]
-        B, A, err = TEBD.block_decimation(W, B, A, D, -1)
-        total_err[i] += err
-        # @tensor B[:] := inv(X)[2,-1]*B[2,-2,-3]
-        # @tensor A[:] := inv(Y)[1,-3]*A[-1,-2,1]
         a = maximum(abs.(A))
         b = maximum(abs.(B))
         eval = Teigs(A,B,1)[1][1]
         A = A*sqrt(b/(eval*a))
         B = B*sqrt(a/(eval*b))
-        opvalues[i, 1] = time
-        for k = 1:nop
-            opvalues[i, k+1] = expectation(A,B,operators[k](time))
+
+        if steps%increment==0
+            datacounter+=1
+            opvalues[datacounter, 1] = time
+            for k = 1:nop
+                opvalues[datacounter, k+1] = mean([expectation(A,B,operators[k](time)[1],operators[k](time)[2]) expectation(B,A,operators[k](time)[1],operators[k](time)[2])])
+            end
         end
     end
     return A,B, opvalues, total_err
@@ -163,18 +179,15 @@ function getChol(A,B)
     sA = size(A)
     sB = size(B)
     eL,eR,vL,vR = Teigs(A,B,1,:LR)
-    vL = sparse(reshape(vL,sA[1],sA[1]))
-    vR = sparse(reshape(vR,last(sB),last(sB)))
-    tvL = trace(vL)
-    tvR = trace(vR)
-    vL = vL/tvL
-    vR = vR/tvR
-    for k=1:size(vL)[1]
-        vL[k,k] = real(vL[k,k])
-        vR[k,k] = real(vR[k,k])
-    end
-    X = Array(sparse(ldltfact(Hermitian(vL))[:LD]))
-    Y = Array(sparse(ldltfact(Hermitian(vR))[:LD]))
+    vL = reshape(vL,sA[1],sA[1])
+    vR = reshape(vR,last(sB),last(sB))
+
+    lH = (vL+vL')/2
+    lH = lH/trace(lH)
+    rH = (vR+vR')/2
+    rH = rH/trace(rH)
+    X = Array(chol(Hermitian(lH)))
+    Y = Array(chol(Hermitian(rH)))
     # X = sqrt(tvL)*Base.full(chol(Hermitian(vL)))
     # Y = sqrt(tvR)*Base.full(chol(Hermitian(vR)))
     # if length(size(A))==4
@@ -189,9 +202,9 @@ end
 
 function iIsing(J,h,g)
     opA = Array{Complex128}(1,2,2,3)
-    opA[1,:,:,:] = reshape([si J*sz h*sx+g*sz],2,2,3)
+    opA[1,:,:,:] = reshape([si J*sz h*sx/2+g*sz/2],2,2,3)
     opB = Array{Complex128}(3,2,2,1)
-    opB[:,:,:,1] = permutedims(reshape([h*sx+g*sz sz si], 2,2,3), [3,1,2])
+    opB[:,:,:,1] = permutedims(reshape([h*sx/2+g*sz/2 sz si], 2,2,3), [3,1,2])
     return opA,opB
 end
 function iIsingBlock(J,h,g)

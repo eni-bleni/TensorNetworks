@@ -23,8 +23,8 @@ steps = 100
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 ##operators to measure and quench parameters
-J(time) = J0 + 0.1*exp(-20(time-0.5)^2)
-h(time) = h0
+J(time) = J0
+h(time) = h0 + 0.1*exp(-20(time-0.5)^2)
 g(time) = g0
 opmag(time) = MPS.MpoFromOperators([[sx,Int(round(latticeSize/2))]],latticeSize)
 opE(time) = MPS.IsingMPO(latticeSize,J(time),h(time),g(time))

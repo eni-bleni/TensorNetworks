@@ -30,19 +30,25 @@ function heisenbergHamblocks(L,Jx, Jy, Jz, hx)
     return blocks
 end
 
-function truncate_svd(U, S, V, D)
+function truncate_svd(U, S, V, D,tol=0)
+    Dtol = 0
+    tot = sum(S.^2)
+    while (Dtol+1 < length(S)) && sum(S[Dtol+1:end].^2)/tot>tol
+        Dtol+=1
+    end
+    D = min(D,Dtol)
     err = sum(S[D+1:end].^2)
     U = U[:, 1:D]
     S = S[1:D]
     V = V[1:D, :]
-    return U, S, V, err
+    return U, S, V, D,err
 end
 
 """ block_decimation(W, Tl, Tr, Dmax,dir)
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
 and performs a block decimation (one TEBD step)
 ```block_decimation(W,TL,TR,Dmax,dir) -> Tl, Tr"""
-function block_decimation(W, Tl, Tr, Dmax, dir)
+function block_decimation(W, Tl, Tr, Dmax, dir=0;tol=0)
     ### input:
     ###     W:      time evolution op W=exp(-tau h) of size (d,d,d,d)
     ###     Tl, Tr: mps sites mps[i] and mps[i+1] of size (D1l,d,D1r) and (D2l,d,D2r)
@@ -71,32 +77,40 @@ function block_decimation(W, Tl, Tr, Dmax, dir)
     # V = SVD[:Vt]
     D1 = size(S)[1] # number of singular values
 
-    if D1 <= Dmax
-        error = 0
+    # if D1 <= Dmax
+    #     err = 0
+    #     if dir == -1
+    #         Tl = reshape(U, D1l,d,D1)
+    #         Tr = reshape(diagm(S)*V, D1,d,D2r)
+    #     elseif dir == 1
+    #         Tl = reshape(U*diagm(S), D1l,d,D1)
+    #         Tr = reshape(V, D1,d,D2r)
+    #     else
+    #         rS = sqrt.(S)
+    #         Tl = reshape(U*diagm(rS), D1l,d,D1)
+    #         Tr = reshape(diagm(rS)*V, D1,d,D2r)
+    #     end
+    # else
+        U,S,V,D,err = truncate_svd(U,S,V,Dmax,tol)
         if dir == -1
-            Tl = reshape(U, D1l,d,D1)
-            Tr = reshape(diagm(S)*V, D1,d,D2r)
+            Tl = reshape(U, D1l,d,D)
+            Tr = reshape(diagm(S)*V, D,d,D2r)
+        elseif dir==1
+            Tl = reshape(U*diagm(S), D1l,d,D)
+            Tr = reshape(V, D,d,D2r)
         else
-            Tl = reshape(U*diagm(S), D1l,d,D1)
-            Tr = reshape(V, D1,d,D2r)
+            rS = sqrt.(S)
+            Tl = reshape(U*diagm(rS), D1l,d,D)
+            Tr = reshape(diagm(rS)*V, D,d,D2r)
         end
-    else
-        U,S,V, error = truncate_svd(U,S,V,Dmax)
-        if dir == -1
-            Tl = reshape(U, D1l,d,Dmax)
-            Tr = reshape(diagm(S)*V, Dmax,d,D2r)
-        else
-            Tl = reshape(U*diagm(S), D1l,d,Dmax)
-            Tr = reshape(V, Dmax,d,D2r)
-        end
-    end
+    # end
 
     if length(stl)==4
-        Tl = permutedims(reshape(Tl, stl[1],stl[3],stl[2],min(D1,Dmax)), [1,3,2,4])
-        Tr = reshape(Tr, min(D1,Dmax),str[2],str[3],str[4])
+        Tl = permutedims(reshape(Tl, stl[1],stl[3],stl[2],D), [1,3,2,4])
+        Tr = reshape(Tr, D,str[2],str[3],str[4])
     end
 
-    return Tl, Tr, error
+    return Tl, Tr, err
 end
 
 function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy_cut, params, eth, mpo=nothing)
