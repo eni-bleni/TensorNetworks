@@ -1,13 +1,18 @@
 module MPS
+export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX
 using TensorOperations
 using LinearMaps
 # define Pauli matrices
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
-
+const sx = [0 1; 1 0]
+const sy = [0 1im; -1im 0]
+const sz = [1 0; 0 -1]
+const si = [1 0; 0 1]
+const s0 = [0 0; 0 0]
+const ZZ = kron(sz, sz)
+const ZI = kron(sz, si)
+const IZ = kron(si, sz)
+const XI = kron(sx, si)
+const IX = kron(si, sx)
 
 """
 Returns the MPO for a 2-site Hamiltonian
@@ -393,7 +398,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             orthvector = reshape(orthTensor,1,prod(so))
             orthvector = orthvector/norm(orthvector)
             tmp = [zeros(prod(so)) nullspace(orthvector)]
-            proj = LinearMap(proj*LinearMap(tmp)*LinearMap(tmp'),ishermitian=true)
+            proj = LinearMap(proj*LinearMap(tmp)*LinearMap(tmp'))
         end
         if orth!=nothing
             hefflin = LinearMap(proj * hefflin * proj',ishermitian=true)
@@ -442,7 +447,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
     return mps, E, var, -canonicity
 end
 
-
 function n_lowest_states(mps, hamiltonian, prec,n)
     states = []
     energies = []
@@ -453,7 +457,6 @@ function n_lowest_states(mps, hamiltonian, prec,n)
     end
     return states,energies
 end
-
 
 function initializeHLR(mps,mpo,HL,HR)
     L = length(mps)
@@ -564,6 +567,32 @@ function traceMPO(mpo,n=1)
         return F[1,1,1,1]
     else
         println("ERROR: choose n=1,2,4 in traceMPO(mpo,n=1)")
+        return "nan"
+    end
+end
+
+
+"""
+calculates Tr(mpo1^n * mpo2) for n=1,2
+"""
+function traceMPOprod(mpo1,mpo2,n=1)
+    L = length(mpo1)
+    if n == 1
+        F = Array{Complex64}(1,1)
+        F[1,1] = 1
+        for i = 1:L
+            @tensor F[-3,-4] := F[1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,3,4,-4])
+        end
+        return F[1,1]
+    elseif n == 2
+        F = Array{Complex64}(1,1,1)
+        F[1,1,1] = 1
+        for i = 1:L
+            @tensor F[-4,-5,-6] := F[1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
+        end
+        return F[1,1,1]
+    else
+        println("ERROR: choose n=1,2 in traceMPOprod(mpo1,mpo2,n=1)")
         return "nan"
     end
 end
@@ -692,6 +721,31 @@ end
 
 
 """
+    ```mpo_to_mps(mpo)```"""
+function mpo_to_mps(mpo)
+    L = length(mpo)
+    smpo = Array{Any}(L)
+    for i = 1:L
+        smpo[i] = size(mpo[i])
+        mpo[i] = reshape(mpo[i], smpo[i][1],smpo[i][2]*smpo[i][3],smpo[i][4])
+    end
+
+    return smpo
+end
+
+
+"""
+    ```mps_to_mpo(mps, smpo)```"""
+function mps_to_mpo(mps, smpo)
+    ## smpo[i] = size(mpo[i])
+    L = length(mps)
+    for i = 1:L
+        mps[i] = reshape(mps[i], smpo[i][1],smpo[i][2],smpo[i][3],smpo[i][4])
+    end
+end
+
+
+"""
 constructs |Psi><Psi| as an MPO
 """
 function pureDensityMatrix(mps)
@@ -751,6 +805,5 @@ function SubTraceDistance(MPO,MPS,l)
     end
     return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
 end
-
 
 end
