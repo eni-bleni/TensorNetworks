@@ -322,22 +322,15 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
 
         if eth != nothing
             Ethermal = MPS.traceMPOprod(mps,eth[2],2)
-            if abs(Ethermal-eth[1])<1e-2
+            prec=1e-3
+            if abs(Ethermal-eth[1])<prec
                 return Ethermal, real(time*1im)
             elseif real(Ethermal) < real(eth[1])
-                error("Time steps too big to obtain desired thermal energy.")
+                println("\x1b[31 Warning: \x1b[0m Time steps too big to obtain desired thermal energy with precision ", prec, ".")
+                return Ethermal, real(time*1im)
             end
         end
 
-		## ETH calculations:
-		# if eth[1] == true
-		# 	E1, hamiltonian = real(eth[2]), eth[3]
-		# 	rho = MPS.multiplyMPOs(mps,mps)
-		# 	E_thermal = real(MPS.traceMPOprod(rho,hamiltonian))
-		# 	if E_thermal <= E1
-		# 		return E_thermal, real(time*1im) # im*time = beta/2
-		# 	end
-		# end
     end
 
     return opvalues, err

@@ -5,7 +5,7 @@ using PyPlot
 println("\n---------------------------------------")
 
 ## parameters for the spin chain:
-latticeSize = 100
+latticeSize = 30
 maxBondDim = 20
 d = 2
 prec = 1e-8
@@ -26,15 +26,10 @@ thermhamblocks(time) = TEBD.isingHamBlocks(latticeSize,J0,h0,g0)
 
 ## TEBD parameters:
 total_time = -im*3    # -im*total_time  for imag time evol
-steps = 1000
+steps = 2000
 entropy_cut = 0         # subsytem size for entanglement entopy; set to 0 to disregard
 
-# define Pauli matrices:
-sx = [0 1; 1 0]
-sy = [0 1im; -1im 0]
-sz = [1 0; 0 -1]
-si = [1 0; 0 1]
-s0 = [0 0; 0 0]
+
 
 ################################################################################
 ##                                  DMRG
@@ -56,7 +51,7 @@ MPS.makeCanonical(mps)
 #     exc,E1 = MPS.DMRG(mps,hamiltonian,prec,ground)
 # end
 
-states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,3)
+states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,10)
 println("energies: ", energies)
 
 
@@ -68,7 +63,7 @@ println("\n...performing ETH...")
 ## thermal state MPO:
 init_params = (J0, h0, g0)
 sub_tr_dist = Array{Complex64}(length(energies))
-subSize = 10
+subSize = 30
 tic()
 for i = 2:length(energies)
     println("\ni = ", i)
