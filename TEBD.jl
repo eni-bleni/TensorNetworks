@@ -226,8 +226,8 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
 		## ETH calculations:
 		if eth[1] == true
 			E1, hamiltonian = real(eth[2]), eth[3]
-			rho = MPS.multiplyMPOs(mps,mps)
-			E_thermal = real(MPS.traceMPOprod(rho,hamiltonian))
+			#rho = MPS.multiplyMPOs(mps,mps)
+			E_thermal = real(MPS.traceMPOprod(mps,hamiltonian,2))
 			if E_thermal <= E1
 				return E_thermal, real(time*1im) # im*time = beta/2
 			end
@@ -295,11 +295,11 @@ function tebd_step(mps, hamblocks, dt, D)
     return total_error
 end
 
-function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0)
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0,eth=nothing)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
-	### eth = (true,E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
+	### eth = (E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
     stepsize = total_time/steps
     nop = length(operators)
     opvalues = Array{Any,2}(steps,1+nop)
@@ -316,6 +316,17 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
         ## entanglement entropy:
         if entropy_cut > 0
             entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
+        end
+
+        # matching enery of the state and E1 with the the energy of the thermal state
+
+        if eth != nothing
+            Ethermal = MPS.traceMPOprod(mps,eth[2],2)
+            if abs(Ethermal-eth[1])<1e-2
+                return Ethermal, real(time*1im)
+            elseif real(Ethermal) < real(eth[1])
+                error("Time steps too big to obtain desired thermal energy.")
+            end
         end
 
 		## ETH calculations:

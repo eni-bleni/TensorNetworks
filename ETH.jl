@@ -5,8 +5,8 @@ using PyPlot
 println("\n---------------------------------------")
 
 ## parameters for the spin chain:
-latticeSize = 100
-maxBondDim = 30
+latticeSize = 10
+maxBondDim = 10
 d = 2
 prec = 1e-8
 
@@ -108,10 +108,9 @@ for i = 2:length(energies)
     exc = states[i]
     E1 = energies[i]
     ETH = (true,E1,hamiltonian)
-    IDmpo = MPS.IdentityMPO(latticeSize,d)
-    E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,thermalIsing,total_time,steps,maxBondDim,1,0,init_params,ETH)
-    rho_th = MPS.multiplyMPOs(IDmpo,IDmpo) # = exp[-beta/2 H]*exp[-beta/2 H]'
-    tr_dist[i] = MPS.traceMPO(IDmpo,4) -2*MPS.mpoExpectation(exc,rho_th) + 1 # = Tr(rho_th^2) - 2<exc|rho_th|exc> + 1 = Tr([rho_th-|exc><exc|]^2)
+    Rho = MPS.IdentityMPO(latticeSize,d)
+    E_thermal, betahalf = TEBD.time_evolve_mpoham(Rho,thermalIsing,total_time,steps,maxBondDim,1,0,init_params,ETH)
+    tr_dist[i] = MPS.traceMPO(Rho,4) -2*MPS.mpoExpectation(exc,Rho,exc,2) + 1 # = Tr(rho_th^2) - 2<exc|rho_th|exc> + 1 = Tr([rho_th-|exc><exc|]^2)
     println("E_thermal, beta/2 = ", E_thermal, ", ", betahalf)
     println("E_exc, Tr(dist^2) = ", E1, ", ", real(tr_dist[i]))
 end
