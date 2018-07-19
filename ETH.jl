@@ -109,7 +109,7 @@ for i = 2:length(energies)
     E1 = energies[i]
     ETH = (true,E1,hamiltonian)
     IDmpo = MPS.IdentityMPO(latticeSize,d)
-    E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,thermalIsing,total_time,steps,maxBondDim,0,init_params,ETH)
+    E_thermal, betahalf = TEBD.time_evolve_mpoham(IDmpo,thermalIsing,total_time,steps,maxBondDim,1,0,init_params,ETH)
     rho_th = MPS.multiplyMPOs(IDmpo,IDmpo) # = exp[-beta/2 H]*exp[-beta/2 H]'
     tr_dist[i] = MPS.traceMPO(IDmpo,4) -2*MPS.mpoExpectation(exc,rho_th) + 1 # = Tr(rho_th^2) - 2<exc|rho_th|exc> + 1 = Tr([rho_th-|exc><exc|]^2)
     println("E_thermal, beta/2 = ", E_thermal, ", ", betahalf)
