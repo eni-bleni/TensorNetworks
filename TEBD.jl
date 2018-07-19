@@ -33,7 +33,7 @@ end
 function truncate_svd(U, S, V, D,tol=0)
     Dtol = 0
     tot = sum(S.^2)
-    while (Dtol+1 < length(S)) && sum(S[Dtol+1:end].^2)/tot>tol
+    while (Dtol+1 <= length(S)) && sum(S[Dtol+1:end].^2)/tot>=tol
         Dtol+=1
     end
     D = min(D,Dtol)

@@ -19,6 +19,33 @@ function random_iMPS(d,D)
     return A,B
 end
 
+function getT(A,B)
+    function T(R)
+        R = reshape(R, last(size(B)), last(size(B)))
+        if length(size(A))==4
+            @tensor ret[:] := B[-2,5,6,2]*conj(B[-1,5,6,1])*R[1,2]
+            @tensor ret[:] := A[-2,5,6,2]*conj(A[-1,5,6,1])*ret[1,2]
+        else
+            @tensor ret[:] := B[-2,5,2]*conj(B[-1,5,1])*R[1,2]
+            @tensor ret[:] := conj(A[-2,5,2]*conj(A[-1,5,1])*ret[1,2])
+        end
+        return reshape(ret,prod(size(ret)))
+    end
+    function Tc(L)
+        L = conj(reshape(L, first(size(A)), first(size(A))))
+        if length(size(A))==4
+            @tensor ret[:] := A[2,5,6,-2]*conj(A[1,5,6,-1])*L[1,2]
+            @tensor ret[:] := conj(B[2,5,6,-2]*conj(B[1,5,6,-1])*ret[1,2])
+        else
+            @tensor ret[:] := A[2,5,-2]*conj(A[1,5,-1])*L[1,2]
+            @tensor ret[:] := conj(B[2,5,-2]*conj(B[1,5,-1])*ret[1,2])
+        end
+        return reshape(ret,prod(size(ret)))
+    end
+    T = LinearMap{Complex128}(T,Tc, first(size(A))^2, last(size(B))^2)
+    return T
+end
+
 function getTL(A,B)
     function TL(L)
         L = reshape(L, first(size(A)), first(size(A)))
@@ -33,6 +60,7 @@ function getTL(A,B)
     end
     return conj(LinearMap{Complex128}(TL, last(size(B))^2, first(size(A))^2))
 end
+
 function getTR(A,B)
     function TR(R)
         R = reshape(R, last(size(B)), last(size(B)))
@@ -48,16 +76,17 @@ function getTR(A,B)
     return LinearMap{Complex128}(TR, first(size(A))^2, last(size(B))^2)
 end
 
+
 function getTOR(A,B,opA,opB)
     function TOR(R)
         R = reshape(R, last(size(B)), last(size(B)))
         F = [1]
         if length(size(A))==4
             @tensor ret[:] := B[-2,5,6,2]*opB[-3,7,5,8]*conj(B[-1,7,6,1])*R[1,2]*F[8]
-            @tensor ret[:] := A[-2,5,6,2]*opA[-3,7,5,8]*conj(A[-1,7,6,1])*ret[1,2,8]
+            @tensor ret[:] := A[-2,5,6,2]*opA[9,7,5,8]*conj(A[-1,7,6,1])*ret[1,2,8]*F[9]
         else
             @tensor ret[:] := B[-2,5,2]*opB[-3,6,5,8]*conj(B[-1,6,1])*R[1,2]*F[8]
-            @tensor ret[:] := A[-2,5,2]*opA[-3,6,5,8]*conj(A[-1,6,1])*ret[1,2,8]
+            @tensor ret[:] := A[-2,5,2]*opA[9,6,5,8]*conj(A[-1,6,1])*ret[1,2,8]*F[9]
         end
         return reshape(ret,prod(size(ret)))
     end
@@ -69,41 +98,40 @@ function getTOL(A,B,opA,opB)
         F = [1]
         if length(size(A))==4
             @tensor ret[:] := A[2,5,6,-2]*opA[8,7,5,-3]*conj(A[1,7,6,-1])*L[1,2]*F[8]
-            @tensor ret[:] := B[2,5,6,-2]*opB[8,7,5,-3]*conj(B[1,7,6,-1])*ret[1,2,8]
+            @tensor ret[:] := B[2,5,6,-2]*opB[8,7,5,9]*conj(B[1,7,6,-1])*ret[1,2,8]*F[9]
         else
             @tensor ret[:] := A[2,5,-2]*opA[8,6,5,-3]*conj(A[1,6,-1])*L[1,2]*F[8]
-            @tensor ret[:] := B[2,5,-2]*opB[8,6,5,-3]*conj(B[1,6,-1])*ret[1,2,8]
+            @tensor ret[:] := B[2,5,-2]*opB[8,6,5,9]*conj(B[1,6,-1])*ret[1,2,8]*F[9]
         end
         return reshape(ret,prod(size(ret)))
     end
     return LinearMap{Complex128}(TOL, last(size(B))^2, first(size(A))^2)
 end
 
-function Teigs(A,B, n=1, vecs=:R)
+function Teigs(A,B, n=1, vecs=:R,tol=1e-8)
     #T = @tensor A[-1,3,4,1]*B[1,5,6,-3]*conj(A[-2,3,4,2])*conj(B[2,5,6,-4])*R[]
-    TL = getTL(A,B)
-    TR = getTR(A,B)
+    T = getT(A,B)
     if vecs == :LR
-        evalsL, evecsL = lmeigs(TL ,nev=n)
-        evalsR, evecsR = lmeigs(TR ,nev=n)
+        evalsL, evecsL = lmeigs(T' ,nev=n,tol=tol)
+        evalsR, evecsR = lmeigs(T ,nev=n,tol=tol)
         return evalsL,evalsR,evecsL,evecsR
     end
     if vecs == :L
-        evalsL, evecsL = lmeigs(TL ,nev=n)
+        evalsL, evecsL = lmeigs(T' ,nev=n,tol=tol)
         return evalsL, evecsL
     end
     if vecs == :R
-        evalsR, evecsR = lmeigs(TR ,nev=n)
+        evalsR, evecsR = lmeigs(T ,nev=n,tol=tol)
         return evalsR, evecsR
     end
     return
 end
 
-function lmeigs(T; args...)
+function lmeigs(T,tol=1e-8; args...)
     if prod(size(T))<10
         return eig(Base.full(T))
     else
-        return eigs(T;args...,tol=1e-8)
+        return eigs(T;args...,tol=tol)
     end
 end
 
