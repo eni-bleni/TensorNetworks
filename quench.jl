@@ -4,9 +4,12 @@ using TEBD
 using Plots
 println("\n---quench.jl------------------------------------")
 
+## folder for saving:
+subfolder = ""
+
 ## parameters for the spin chain:
-latticeSize = 30
-maxBondDim = [20]
+latticeSize = 80
+maxBondDim = [100]
 d = 2
 prec = 1e-8
 
@@ -19,7 +22,7 @@ g0 = 0.0
 total_time_thermal = -im*[1/2]/2 # -im*total_time_thermal  for imag time evol
 total_time_quench = 4.0
 steps = 100
-
+increment = 2 # stepsize > 1 after which physical quantities are calculated
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 ##operators to measure and quench parameters
@@ -65,5 +68,78 @@ for beta_th in total_time_thermal
         save_data(real.(opvalues),header=string(sth(latticeSize,2*real(beta_th),total_time_quench,steps,maxD),"t \t E \t mag\n"))
     end
 end
+
+
+## PLOTTING and SAVING
+figure(1)
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$E(t)\$")
+title("energy")
+legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
+savefig("figures/"*subfolder*"/energy.pdf")
+open("data/quench/"*subfolder*"/energy.txt", "w") do f
+    if length(total_time_thermal) > 1
+        write(f, string("# L= ",latticeSize,"  D= ",maxBondDim,"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  beta= ", 2*real(im*total_time_thermal), "\n"))
+    else
+        write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  D= ", maxBondDim, "\n"))
+    end
+end
+open("data/quench/"*subfolder*"/energy.txt", "a") do f
+    writedlm(f, energy_all)
+end
+
+# figure(2)
+# xlabel("time")
+# ylabel("entanglement entropy")
+# savefig("figures/entanglement.pdf")
+# writedlm("data/quench/entanglement.txt", entropy_all)
+
+figure(3)
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
+title("magnetization")
+savefig("figures/"*subfolder*"/magnetization.pdf")
+open("data/quench/"*subfolder*"/magnetization.txt", "w") do f
+    if length(total_time_thermal) > 1
+        write(f, string("# L= ",latticeSize,"  D= ",maxBondDim,"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  beta= ", 2*real(im*total_time_thermal), "\n"))
+    else
+        write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  D= ", maxBondDim, "\n"))
+    end
+end
+open("data/quench/"*subfolder*"/magnetization.txt", "a") do f
+    writedlm(f, magnetization_all)
+end
+
+
+figure(4)
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
+title("correlation function")
+savefig("figures/"*subfolder*"/corr_fct.pdf")
+open("data/quench/"*subfolder*"/corr_fct.txt", "w") do f
+    if length(total_time_thermal) > 1
+        write(f, string("# L= ",latticeSize,"  D= ",maxBondDim,"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  beta= ", 2*real(im*total_time_thermal), "\n"))
+    else
+        write(f, string("# L= ",latticeSize,"  beta= ",2*real(im*total_time_thermal),"  t_max= ",total_time_quench,"  steps= ",steps,"\n"))
+        write(f, string("t \t  D= ", maxBondDim, "\n"))
+    end
+end
+open("data/quench/"*subfolder*"/corr_fct.txt", "a") do f
+    writedlm(f, corr_fct_all)
+end
+
+# figure(5)
+# xlabel("time")
+# ylabel("correlation length")
+# savefig("figures/corr_length.pdf")
+# writedlm("data/quench/corr_length.txt", corr_length_all)
+
+
+
 
 println("done: quench.jl")
