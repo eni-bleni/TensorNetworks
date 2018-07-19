@@ -89,7 +89,7 @@ MPS.makeCanonical(mps)
 #     exc,E1 = MPS.DMRG(mps,hamiltonian,prec,ground)
 # end
 
-states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,15)
+states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,3)
 println("energies: ", energies)
 
 
