@@ -34,6 +34,7 @@ for i = 1:length(bondDims)
 end
 
 figure(1)
+xlim(0,7)
 xlabel("\$t\\, /\\, J \$")
 ylabel("\$E(t)\$")
 title("\$energy\$")
@@ -42,13 +43,18 @@ layout.nice_ticks()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(2)
+xlim(0,7)
+ylim(-0.425,-0.4)
 xlabel("\$t\\, /\\, J \$")
 ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
 title("\$magnetization\$")
+ax = subplot(111)
+ax[:set_yticks]([-0.42, -0.41, -0.4])
 layout.nice_ticks()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(3)
+xlim(0,7)
 xlabel("\$t\\, /\\, J \$")
 ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
 title("\$correlation\\, function\$")
@@ -146,18 +152,20 @@ savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 subfolder = "1e-1shortGauss_beta0.01_Lstudies"
 sizes = [80,120,200]
+lstyles = ["-", "--", "-."]
 
-for L in sizes
+for i = 1:length(sizes)
+    L = sizes[i]
     E_mps, header = readdlm("data/quench/"*subfolder*"/L"*string(L)*"/energy.txt", header=true)
     magnetization_mps, header = readdlm("data/quench/"*subfolder*"/L"*string(L)*"/magnetization.txt", header=true)
     corr_fct_mps, header = readdlm("data/quench/"*subfolder*"/L"*string(L)*"/corr_fct.txt", header=true)
 
     figure(10)
-    plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$L = $L\$")
+    plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$L = $L\$", ls=lstyles[i])
     figure(11)
-    plot(magnetization_mps[:,1], magnetization_mps[:,2])
+    plot(magnetization_mps[:,1], magnetization_mps[:,2], ls=lstyles[i])
     figure(12)
-    plot(corr_fct_mps[:,1], corr_fct_mps[:,2])
+    plot(corr_fct_mps[:,1], corr_fct_mps[:,2], ls=lstyles[i])
 end
 
 figure(10)
