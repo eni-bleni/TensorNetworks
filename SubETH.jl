@@ -5,8 +5,8 @@ using PyPlot
 println("\n---------------------------------------")
 
 ## parameters for the spin chain:
-latticeSize = 30
-maxBondDim = 20
+latticeSize =10
+maxBondDim = 10
 d = 2
 prec = 1e-8
 
@@ -51,7 +51,7 @@ MPS.makeCanonical(mps)
 #     exc,E1 = MPS.DMRG(mps,hamiltonian,prec,ground)
 # end
 
-states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,10)
+states,energies = MPS.n_lowest_states(mps, hamiltonian, prec,3)
 println("energies: ", energies)
 
 
@@ -63,7 +63,7 @@ println("\n...performing ETH...")
 ## thermal state MPO:
 init_params = (J0, h0, g0)
 sub_tr_dist = Array{Complex64}(length(energies))
-subSize = 30
+subSize = 2
 tic()
 for i = 2:length(energies)
     println("\ni = ", i)
