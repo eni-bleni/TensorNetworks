@@ -109,17 +109,62 @@ E_mps, header = readdlm("data/quench/"*subfolder*"/energy.txt", header=true)
 magnetization_mps, header = readdlm("data/quench/"*subfolder*"/magnetization.txt", header=true)
 corr_fct_mps, header = readdlm("data/quench/"*subfolder*"/corr_fct.txt", header=true)
 betas = include_string(join(header[3:end]))
+L = include_string(split(split(subfolder,"_")[2],"L")[2]) # = 50
 
 for i = 1:length(betas)
     beta = betas[i]
 
     figure(7)
-    plot(E_mps[:,1], E_mps[:,i+1]/49, label="\$\\beta_{th}\\, / \\,J = $beta\$")
+    plot(E_mps[:,1], E_mps[:,i+1]/(L-1), label="\$\\beta_{th}\\, / \\,J = $beta\$")
     figure(8)
     plot(magnetization_mps[:,1], magnetization_mps[:,i+1])
     figure(9)
     plot(corr_fct_mps[:,1], corr_fct_mps[:,i+1])
 end
+
+# new format for low T:
+subfolder = "1e-1shortGauss_lowT"
+f = open("data/quench/"*subfolder*"/opvalues.txt")
+lines = readlines(f)
+close(f)
+sep_inds = findin(lines, [""])
+
+for i = 1:length(sep_inds)
+    E_mps = Array{Float64}(parse(split(lines[1])[8]), 2)
+    magnetization_mps = Array{Float64}(parse(split(lines[1])[8]), 2)
+    corr_fct_mps = Array{Float64}(parse(split(lines[1])[8]), 2)
+    counter = 1
+
+    if i==1
+        beta = include_string(split(lines[1])[4])
+        L = include_string(split(lines[1])[2])
+        for l = 3 : sep_inds[1]-1
+            line = parse.(split(lines[l]))
+            E_mps[counter,:] = [line[1] line[2]]
+            magnetization_mps[counter,:] = [line[1] line[3]]
+            corr_fct_mps[counter,:] = [line[1] line[4]]
+            counter += 1
+        end
+    else
+        beta = include_string(split(lines[sep_inds[i-1]+1])[4])
+        L = include_string(split(lines[sep_inds[i-1]+1])[2])
+        for l = sep_inds[i-1]+3 : sep_inds[i]-1
+            line = parse.(split(lines[l]))
+            E_mps[counter,:] = [line[1] line[2]]
+            magnetization_mps[counter,:] = [line[1] line[3]]
+            corr_fct_mps[counter,:] = [line[1] line[4]]
+            counter += 1
+        end
+    end
+
+    figure(7)
+    plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$\\beta_{th}\\, / \\,J = $beta\$")
+    figure(8)
+    plot(magnetization_mps[:,1], magnetization_mps[:,2])
+    figure(9)
+    plot(corr_fct_mps[:,1], corr_fct_mps[:,2])
+end
+
 
 figure(7)
 xlabel("\$t\\, /\\, J \$")
@@ -193,6 +238,48 @@ ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
 title("\$correlation\\, function\$")
 layout.nice_ticks()
 savefig("figures/"*subfolder*"/corr_fct.pdf")
+
+
+
+###-----------------------------------------------------------------------------
+### correlation fct in dependence on beta:
+
+f = open("data/corr_fcts_crit.txt")
+lines = readlines(f)
+close(f)
+
+sep_inds = findin(lines, [""])
+
+for i = 1:length(sep_inds)
+    corr = Array{Float64}(parse(split(lines[1])[2])-1, 2)
+
+    if i==1
+        beta = include_string(split(lines[1])[4])
+        for l = 3 : sep_inds[1]-1
+            line = parse.(split(lines[l]))
+            corr[line[1],:] = [line[1] line[2]]
+        end
+    else
+        beta = include_string(split(lines[sep_inds[i-1]+1])[4])
+        for l = sep_inds[i-1]+3 : sep_inds[i]-1
+            line = parse.(split(lines[l]))
+            corr[line[1],:] = [line[1] line[2]]
+        end
+    end
+
+    figure(13)
+    semilogy(corr[:,1], corr[:,2], label="\$\\beta_{th}\\, / \\,J = $beta\$")
+end
+
+figure(13)
+xlabel("\$ m \$")
+ylabel("\$\\vert \\langle \\sigma_z(1) \\, \\sigma_z(1+m) \\rangle \\vert\$")
+title("\$correlation\\, function\$")
+legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
+layout.nice_ticks()
+savefig("figures/corr_fct_distance_crit.pdf")
+
+
 
 
 
