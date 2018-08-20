@@ -19,18 +19,19 @@ h0 = 1.0 #-0.525
 g0 = 0.0 # 0.25
 
 ## TEBD parameters:
-total_time_thermal = -im*[0.5]/2 # -im*total_time_thermal  for imag time evol
+total_time_thermal = -im*[0.01, 0.1, 0.3, 0.5, 1.0, 2.0, 4.0, 8.0]/2 # -im*total_time_thermal  for imag time evol
 total_time_quench = 5.0
-steps = 1000
+steps = 1100
 analyze_thermal_states = false # calculate correlation fct for all beta_th
 perform_quench = true
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 ## operators to measure and quench parameters:
 J(time) = J0
+delta = 0.1
 # h(time) = h0 + exp(-3(time-2)^2)      # large Gaussian quench
-h(time) = h0 + 0.01*exp(-20(time-0.5)^2) # small Gaussian quench
-# h(time) = time < 0.5 ? h0 : h0+0.1    # instantaneous quench
+h(time) = h0 + delta*exp(-20(time-0.5)^2) # small Gaussian quench
+# h(time) = time < 0.5 ? h0 : h0+delta    # instantaneous quench
 g(time) = g0
 
 opE(time) = MPS.IsingMPO(latticeSize,J(time),h(time),g(time))
@@ -49,7 +50,7 @@ ETH = (false,0,0) # dummys: no ETH calcs here
 
 
 function sth(L,beta,time,steps,D)
-    return string("L= ",L,"  beta= ",beta,"  t_max= ",time,"  steps= ",steps,"  D= ", D,"  prec= ",prec,"\n")
+    return string("L= ",L,"  beta= ",beta,"  t_max= ",time,"  steps= ",steps,"  D= ", D,"  prec= ",prec,"  delta= ",delta,"\n")
 end
 
 function sth2(L,beta,steps,D)
@@ -74,7 +75,7 @@ for beta_th in total_time_thermal
 
         ## thermal state MPO:
         IDmpo = MPS.IdentityMPO(latticeSize,d)
-        @time TEBD.tebd_simplified(IDmpo,thermhamblocks,beta_th,steps,maxD,[], tol=prec)
+        @time TEBD.tebd_simplified(IDmpo,thermhamblocks,beta_th,steps,maxD,[], ETH, tol=prec)
         println("trace rho_th(0) = ", MPS.traceMPO(IDmpo,2))
 
         if analyze_thermal_states
@@ -96,7 +97,7 @@ for beta_th in total_time_thermal
 
         if perform_quench
             ## thermal quench:
-            @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,operators, tol=prec)
+            @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,operators, ETH, tol=prec)
             println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
 
             ## Plotting:

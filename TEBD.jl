@@ -309,7 +309,7 @@ function tebd_step(mps, hamblocks, dt, D; tol=0.0)
     return total_error
 end
 
-function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0; tol=0.0)
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, eth, entropy_cut=0; tol=0.0)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -336,15 +336,14 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
             entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
         end
 
-		## ETH calculations:
-		# if eth[1] == true
-		# 	E1, hamiltonian = real(eth[2]), eth[3]
-		# 	rho = MPS.multiplyMPOs(mps,mps)
-		# 	E_thermal = real(MPS.traceMPOprod(rho,hamiltonian))
-		# 	if E_thermal <= E1
-		# 		return E_thermal, real(time*1im) # im*time = beta/2
-		# 	end
-		# end
+		# ETH calculations:
+		if eth[1] == true
+			E1, hamiltonian = real(eth[2]), eth[3]
+			E_thermal = real(MPS.traceMPOprod(mps,hamiltonian,2))
+			if E_thermal <= E1
+				return E_thermal, real(time*1im) # im*time = beta/2
+			end
+		end
     end
 
     return opvalues, err
