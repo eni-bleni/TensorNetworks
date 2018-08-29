@@ -405,11 +405,14 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             mpsguess = proj*mpsguess
         end
 
+		tic()
         if size(hefflin)[1] < 10
+			println("small ham")
             evals, evecs = eig(Base.full(hefflin))
         else
             evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
         end
+		toc()
 
         if !(evals ≈ real(evals))
             println("ERROR: no real eigenvalues")
@@ -451,7 +454,9 @@ function n_lowest_states(mps, hamiltonian, prec,n)
     states = []
     energies = []
     for k = 1:n
-        @time state,E = MPS.DMRG(mps,hamiltonian,prec,states)
+		mps2 = randomMPS(length(mps),size(mps[2])[2],size(mps[2])[3])
+		makeCanonical(mps2)
+        @time state,E = MPS.DMRG(mps2,hamiltonian,prec,states)
         append!(states,[state])
         append!(energies,E)
     end

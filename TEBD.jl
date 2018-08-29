@@ -304,6 +304,11 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
     nop = length(operators)
     opvalues = Array{Any,2}(steps,1+nop)
     err = Array{Any,1}(steps)
+    #Initialize ETH
+    if eth != nothing
+        nState = length(eth[1])
+        ThermalStates = Array{Any}(nState)
+    end
     for counter = 1:steps
         time = counter*total_time/steps
         err[counter] = tebd_step(mps,hamblocks(time),stepsize,D)
@@ -321,13 +326,20 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
         # matching enery of the state and E1 with the the energy of the thermal state
 
         if eth != nothing
-            Ethermal = MPS.traceMPOprod(mps,eth[2],2)
-            prec=1e-4
-            if abs(Ethermal-eth[1])<prec
-                return Ethermal, real(time*1im)
-            elseif real(Ethermal) < real(eth[1])
-                println("\x1b[31m Warning: \x1b[0m Time steps too big to obtain desired thermal energy with precision ", prec, ".")
-                return Ethermal, real(time*1im)
+            if nState == 0
+                return ThermalStates
+            else
+                Ethermal = MPS.traceMPOprod(mps,eth[2],2)
+				#println(real(Ethermal),",",real(time*1im))
+                prec=1e-4
+                if abs(Ethermal-eth[1][nState])<prec
+                    ThermalStates[nState] = [real(time*1im),real(Ethermal),1*mps]
+                    nState-=1
+                elseif real(Ethermal) < real(eth[1][nState])
+                    println("\x1b[31m Warning: \x1b[0m Time steps too big to obtain desired thermal energy with precision ", prec, ".")
+                    ThermalStates[nState] = [real(time*1im),real(Ethermal),1*mps]
+                    nState-=1
+                end
             end
         end
 
@@ -335,5 +347,53 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
 
     return opvalues, err
 end
+
+function tebd_ETH(mps, hamblocks,dt0,D,prec, eth)
+    #mps=mps_input
+    dt = dt0
+    nState = length(eth[1])
+    ThermalStates = Array{Any}(nState)
+    time = 0
+    E0 = MPS.traceMPOprod(mps,eth[2],2)
+    tmp = Array{Any}(length(mps))
+    k=0
+    while true
+        time += dt
+        if nState == 0
+            return ThermalStates
+        else
+            if k>0
+                tebd_step(mps,hamblocks(time),dt,D)
+                println(k)
+                k-=1
+            else
+                tmp = copy(mps)
+                tebd_step(tmp,hamblocks(time),dt,D)
+                E = MPS.traceMPOprod(tmp,eth[2],2)
+                dE = abs(E0 - E)
+                k= trunc(Int,abs(E-eth[1][nState])/dE) - 20
+                println(real(E))
+
+                if abs(E-eth[1][nState])<prec
+                    ThermalStates[nState] = [real(time*1im),real(E),tmp]
+                    nState-=1
+                    mps=tmp
+                    dt=dt0
+                    E0=E
+                elseif real(E) < real(eth[1][nState])
+                    println("\x1b[31m Action: \x1b[0m  Reducing time step to ", dt/2,".")
+                    time-=dt
+                    dt=dt/2
+                elseif real(E) > real(eth[1][nState])
+                    mps = tmp
+                    E0=E
+                end
+            end
+        end
+    end
+
+end
+
+
 
 end
