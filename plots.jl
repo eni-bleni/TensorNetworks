@@ -78,15 +78,27 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
             end
         end
 
-        figure(fig_num)
-        plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$\\beta_{th}\\, / \\,J = $beta\$")
-        figure(fig_num+1)
-        plot(magnetization_mps[:,1], magnetization_mps[:,2])
-        axhline(thermal_vals[i,5], ls="--",c="b")
-        figure(fig_num+2)
-        plot(corr_fct_mps[:,1], corr_fct_mps[:,2])
-        figure(fig_num+3)
-        plot(error_mps[:,1], error_mps[:,2])
+        if beta == 0.0
+            figure(fig_num)
+            plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$ground\\, state\$", c="k")
+            figure(fig_num+1)
+            plot(magnetization_mps[:,1], magnetization_mps[:,2], c="k")
+            axhline(thermal_vals[i,5], ls="--",c="k")
+            figure(fig_num+2)
+            plot(corr_fct_mps[:,1], corr_fct_mps[:,2], c="k")
+            figure(fig_num+3)
+            plot(error_mps[:,1], error_mps[:,2], c="k")
+        else
+            figure(fig_num)
+            plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$\\beta_{th}\\, / \\,J = $beta\$")
+            figure(fig_num+1)
+            plot(magnetization_mps[:,1], magnetization_mps[:,2])
+            axhline(thermal_vals[i,5], ls="--",c="b")
+            figure(fig_num+2)
+            plot(corr_fct_mps[:,1], corr_fct_mps[:,2])
+            figure(fig_num+3)
+            plot(error_mps[:,1], error_mps[:,2])
+        end
         if plot_scaled_mag
             figure(fig_num+4)
             plot(magnetization_mps[:,1]/beta, magnetization_mps[:,2])
@@ -94,12 +106,96 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
     end
 end
 
+function correlator_spreading(fig_num, div_lims;linplot=false)
+    f = open("data/quench/"*subfolder*"/corr_spreading.txt")
+    lines = readlines(f)
+    close(f)
+    sep_inds = findin(lines, [""])
+    dist_interval = include_string(join(split(lines[2])[6:end]))
+    num_mvals = length(dist_interval)
+
+    for i = 1:length(sep_inds)
+        counter = 1
+
+        if i==1
+            steps = parse(split(lines[1])[8])
+            dist_grid = Array{Float64}(num_mvals,steps)
+            time_grid = Array{Float64}(num_mvals,steps)
+            corr_grid = Array{Float64}(num_mvals,steps)
+            for m=1:num_mvals
+                dist_grid[m,:] = dist_interval[m]
+            end
+            corr_fct_mps = Array{Float64}(steps, num_mvals+1)
+            beta = include_string(split(lines[1])[4])
+            for l = 3 : sep_inds[1]-1
+                line = parse.(split(lines[l]))
+                time_grid[:,counter] = line[1]
+                corr_grid[:,counter] = line[2:end]
+                corr_fct_mps[counter,:] = line
+                counter += 1
+            end
+        else
+            steps = parse(split(lines[sep_inds[i-1]+1])[8])
+            dist_grid = Array{Float64}(num_mvals,steps)
+            time_grid = Array{Float64}(num_mvals,steps)
+            corr_grid = Array{Float64}(num_mvals,steps)
+            for m=1:num_mvals
+                dist_grid[m,:] = dist_interval[m]
+            end
+            corr_fct_mps = Array{Float64}(steps, num_mvals+1)
+            beta = include_string(split(lines[sep_inds[i-1]+1])[4])
+            for l = sep_inds[i-1]+3 : sep_inds[i]-1
+                line = parse.(split(lines[l]))
+                time_grid[:,counter] = line[1]
+                corr_grid[:,counter] = line[2:end]
+                corr_fct_mps[counter,:] = line
+                counter += 1
+            end
+        end
+
+        figure(fig_num+2*(i-1))
+        for j=1:num_mvals
+            m_plot = dist_interval[j]
+            if linplot==true
+                plot(corr_fct_mps[:,1], abs.(corr_fct_mps[:,j+1]), label="\$m = $m_plot\$")
+            else
+                semilogy(corr_fct_mps[:,1], abs.(corr_fct_mps[:,j+1]), label="\$m = $m_plot\$")
+            end
+        end
+        xlim(0,4)
+        xlabel("\$t\\, /\\, J \$")
+        ylabel("\$\\vert\\langle \\sigma_z(L/2) \\, \\sigma_z(L/2+m) \\rangle\\vert\$")
+        layout.nice_ticks()
+        title("\$\\beta_{th}\\, / \\,J = $beta\$")
+        savefig("figures/"*subfolder*"/corr_fct_dist"*string(i)*".pdf")
+
+        figure(fig_num+2*(i-1)+1)
+        div_lim = div_lims[i]
+        if div_lim < 1.0
+            lvl1 = linspace(minimum(abs.(corr_grid)), div_lim*maximum(abs.(corr_grid)), 100)
+            lvl2 = linspace(1.001*div_lim*maximum(abs.(corr_grid)), maximum(abs.(corr_grid)), 100)
+            corr_lvls = cat(1, lvl1, lvl2)
+        else
+            corr_lvls = linspace(minimum(abs.(corr_grid)), maximum(abs.(corr_grid)), 200)
+        end
+        contourf(time_grid, dist_grid, abs.(corr_grid), levels=corr_lvls, cmap="jet")#, locator=matplotlib[:ticker][:LogLocator](10))
+        xlim(0,4)
+        title("\$\\beta_{th}\\, / \\,J = $beta\$")
+        xlabel("\$t\\, /\\, J \$")
+        ylabel("\$m\$")
+        colorbar()
+        # cbar[:set_labels]("\$\\langle \\sigma_z(L/2) \\, \\sigma_z(L/2+m) \\rangle\$")
+        savefig("figures/"*subfolder*"/corr_spreading"*string(i)*".pdf")
+    end
+end
+
+
 
 ###-----------------------------------------------------------------------------
 ### convergence with increasing D:
 
 ### read out data:
-subfolder = "1e-1shortdetailGauss_L50_beta0.5_J1_h1"
+subfolder = "thermal/1e-1shortdetailGauss_L50_beta0.5_J1_h1"
 
 E_mps, header = readdlm("data/quench/"*subfolder*"/energy.txt", header=true)
 magnetization_mps, header = readdlm("data/quench/"*subfolder*"/magnetization.txt", header=true)
@@ -195,9 +291,11 @@ end
 ###-----------------------------------------------------------------------------
 ### Temperature dependence at criticality:
 
-subfolder = "atCriticality"
+subfolder = "thermal/atCriticality"
 read_and_plot_Tdependence(7,true)
-
+subfolder = "groundstate/atCriticality"
+read_and_plot_Tdependence(7,false)
+subfolder = "thermal/atCriticality"
 
 figure(7)
 energy_layout(true)
@@ -230,7 +328,7 @@ savefig("figures/"*subfolder*"/magnetization_tT.pdf")
 ###-----------------------------------------------------------------------------
 ### system size (L) dependence:
 
-subfolder = "1e-1shortGauss_beta0.01_Lstudies"
+subfolder = "thermal/1e-1shortGauss_beta0.01_Lstudies"
 sizes = [80,120,200]
 lstyles = ["-", "--", "-."]
 
@@ -302,7 +400,7 @@ ylabel("\$\\vert \\langle \\sigma_z(1) \\, \\sigma_z(1+m) \\rangle \\vert\$")
 title("\$correlation\\, function\$")
 # legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
 layout.nice_ticks()
-savefig("figures/correlations/corr_fct_distance_offcrit.pdf")
+savefig("figures/thermal/correlations/corr_fct_distance_offcrit.pdf")
 
 
 
@@ -312,7 +410,7 @@ E0 = -0.820980161008688
 mag0 = -0.4058378480098809
 
 # new format:
-subfolder = "magnitude_studies"
+subfolder = "thermal/magnitude_studies"
 f = open("data/quench/"*subfolder*"/opvalues.txt")
 lines = readlines(f)
 close(f)
@@ -434,8 +532,11 @@ savefig("figures/"*subfolder*"/error.pdf")
 ###-----------------------------------------------------------------------------
 ### Temperature dependence off criticality:
 
-subfolder = "offCriticality"
+subfolder = "thermal/offCriticality"
 read_and_plot_Tdependence(23)
+subfolder = "groundstate/offCriticality"
+read_and_plot_Tdependence(23)
+subfolder = "thermal/offCriticality"
 
 
 figure(23)
@@ -461,9 +562,11 @@ savefig("figures/"*subfolder*"/error.pdf")
 ###-----------------------------------------------------------------------------
 ### Temperature dependence instantaneous quench:
 
-subfolder = "Instantaneous_Tstudies"
+subfolder = "thermal/Instantaneous_Tstudies"
 read_and_plot_Tdependence(27)
-
+subfolder = "groundstate/Instantaneous_Tstudies"
+read_and_plot_Tdependence(27)
+subfolder = "thermal/Instantaneous_Tstudies"
 
 figure(27)
 energy_layout(true)
@@ -484,6 +587,42 @@ error_layout(true)
 savefig("figures/"*subfolder*"/error.pdf")
 
 
+
+###-----------------------------------------------------------------------------
+### Temperature dependence continuous quench:
+
+subfolder = "thermal/continuous_quench"
+read_and_plot_Tdependence(31)
+
+
+figure(31)
+energy_layout(true)
+savefig("figures/"*subfolder*"/energy.pdf")
+
+figure(32)
+magnetization_layout(true)
+savefig("figures/"*subfolder*"/magnetization.pdf")
+
+figure(33)
+corr_fct_layout(true)
+ax = subplot(111)
+ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
+savefig("figures/"*subfolder*"/corr_fct.pdf")
+
+figure(34)
+error_layout(true)
+savefig("figures/"*subfolder*"/error.pdf")
+
+
+
+###-----------------------------------------------------------------------------
+### correlator spreading:
+
+subfolder = "thermal/atCriticality"
+correlator_spreading(35,[0.4, 1e-1, 0.5])
+
+subfolder = "thermal/offCriticality"
+correlator_spreading(41,[0.4, 1e-1, 1.0];linplot=true)
 
 
 

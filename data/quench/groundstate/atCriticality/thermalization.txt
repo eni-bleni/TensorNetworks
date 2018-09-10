@@ -1,0 +1,2 @@
+# beta_th 	 E_final 	 E_thermal 	 beta_final 	 sx_final 
+0	-63.15646943888747	-63.1564713661776	6.836	-0.6352153831632699

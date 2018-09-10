@@ -8,7 +8,7 @@ using PyPlot
 println("\n---thermalization.jl------------------------------------")
 
 ## data folder:
-subfolder = "Instantaneous_Tstudies"
+subfolder = "thermal/atCriticality"
 
 ## parameters for the spin chain:
 latticeSize = 50
@@ -18,7 +18,7 @@ prec = 1e-20
 
 ## Ising parameters:
 J0 = 1.0
-h0 = 1.0+0.1 #-0.525
+h0 = 1.0 #-0.525
 g0 = 0.0 # 0.25
 
 ## TEBD parameters:
