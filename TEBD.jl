@@ -15,7 +15,19 @@ function isingHamBlocks(L,J,h,g)
     end
     return blocks
 end
-
+function inhomogeneousIsingHamBlocks(L,J,h,g)
+    blocks = Array{Any,1}(L)
+    for i=1:L
+        if i==1
+            blocks[i] = J[i]*ZZ + h[i]/2*(XI+2IX) + g[i]/2*(ZI+2IZ)
+        elseif i==L-1
+            blocks[i] = J[i]*ZZ + h[i]/2*(2*XI+IX) + g[i]/2*(2*ZI+IZ)
+        else
+            blocks[i] = J[i]*ZZ + h[i]/2*(XI+IX) + g[i]/2*(ZI+IZ)
+        end
+    end
+    return blocks
+end
 function heisenbergHamblocks(L,Jx, Jy, Jz, hx)
     blocks = Array{Any,1}(L)
     for i=1:L
@@ -48,7 +60,7 @@ end
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
 and performs a block decimation (one TEBD step)
 ```block_decimation(W,TL,TR,Dmax,dir) -> Tl, Tr"""
-function block_decimation(W, Tl, Tr, Dmax, dir=0;tol=0)
+function block_decimation(W, Tl, Tr, Dmax, dir=0; tol=0)
     ### input:
     ###     W:      time evolution op W=exp(-tau h) of size (d,d,d,d)
     ###     Tl, Tr: mps sites mps[i] and mps[i+1] of size (D1l,d,D1r) and (D2l,d,D2r)
@@ -251,7 +263,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
     return expect, entropy, magnetization, correlation, corr_length
 end
 
-function tebd_step(mps, hamblocks, dt, D)
+function tebd_step(mps, hamblocks, dt, D; tol=0)
     d = size(mps[1])[2]
     L = length(mps)
     if isodd(L)
@@ -273,7 +285,7 @@ function tebd_step(mps, hamblocks, dt, D)
     for i = 1:2:L-1
         W = expm(-1im*dt*hamblocks[i])
         W = reshape(W, (d,d,d,d))
-        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, -1)
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, -1, tol=tol)
         total_error += error
         # preserve canonical structure:
         if i < L-2
@@ -293,7 +305,7 @@ function tebd_step(mps, hamblocks, dt, D)
     for i = even_start:-2:2
         W = expm(-1im*dt*hamblocks[i])
         W = reshape(W, (d,d,d,d))
-        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, 1)
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, 1, tol=tol)
         total_error += error
         # preserve canonical structure:
         if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
@@ -309,7 +321,7 @@ function tebd_step(mps, hamblocks, dt, D)
     return total_error
 end
 
-function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0)
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0; tol=0)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -319,8 +331,11 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
     opvalues = Array{Any,2}(steps,1+nop)
     err = Array{Any,1}(steps)
     for counter = 1:steps
+        if counter % 10 == 0
+            println("step ",counter," / ",steps)
+        end
         time = counter*total_time/steps
-        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D)
+        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D,tol=tol)
         ## expectation values:
         opvalues[counter,1] = time
         for k = 1:nop
@@ -328,9 +343,9 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entrop
         end
 
         ## entanglement entropy:
-        if entropy_cut > 0
-            entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
-        end
+        # if entropy_cut > 0
+        #     entropy[counter,:] = [time MPS.entropy(mps,entropy_cut)]
+        # end
 
 		## ETH calculations:
 		# if eth[1] == true

@@ -5,11 +5,12 @@ using MPS
 time = []
 Ds = []
 mpo = MPS.IsingMPO(10,1,1,0)
-for D = 1:7
+mpo0 = MPS.IsingMPO(10,1,1,0)
+for D = 1:9
     # mps = MPS.randomMPS(10,2,)
     # @time MPS.MPSnorm(mps)
     println(D)
-    push!(time, @elapsed MPS.traceMPOprod(mpo,mpo,2))
+    push!(time, @elapsed MPS.traceMPOprod(mpo,mpo0,2))
     push!(Ds,first(size(mpo[5])))
     mpo = MPS.addmpos(mpo,mpo,false)
 end
