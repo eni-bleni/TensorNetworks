@@ -72,8 +72,18 @@ for i = 1:length(sep_inds)
     plot(time, sx_t, label="\$\\beta_{th}\\, / \\,J = $beta_th\$")
     plot(time, model(time, fit.param), ls="--", c="k")
 
+    if i <= 5
+        figure(1+i)
+        plot(time, sx_t, label="\$\\beta_{th}\\, / \\,J = $beta_th\$", c=string("C",i-1))
+        plot(time, model(time, fit.param), ls="--", c="k")
+    else
+        figure(7)
+        plot(time, sx_t, label="\$\\beta_{th}\\, / \\,J = $beta_th\$", c=string("C",i-1))
+        plot(time, model(time, fit.param), ls="--", c="k")
+    end
+
     if decay_exp
-        figure(2)
+        figure(8)
         plot(fit.param[3], fit.param[2], ls="", marker="s")
     end
 
@@ -102,8 +112,18 @@ legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
 layout.nice_ticks()
 savefig("figures/thermal/"*subfolder*"/magnetization_fourier.pdf")
 
+y_min = [-0.01002, -0.09925, -0.2765, -0.407, -0.56, -0.646]
+y_max = [-0.00995, -0.0985, -0.2745, -0.404, -0.556, -0.615]
+for i in [1,2,3,4,5,6]
+    figure(1+i)
+    axis([t_min, t_max, y_min[i], y_max[i]])
+    legend(loc = "lower right", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
+    layout.nice_ticks()
+    savefig("figures/thermal/"*subfolder*"/magnetization_fourier"*string(i)*".pdf")
+end
+
 if decay_exp
-    figure(2)
+    figure(8)
     xlabel("\$Re(\\omega)\$")
     ylabel("\$Im(\\omega)\$")
     layout.nice_ticks()

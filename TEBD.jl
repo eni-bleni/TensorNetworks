@@ -309,7 +309,7 @@ function tebd_step(mps, hamblocks, dt, D; tol=0.0)
     return total_error
 end
 
-function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, eth, entropy_cut=0; tol=0.0)
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, eth, entropy_cut=0; increment=1, tol=0.0)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -334,9 +334,10 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, eth, e
     else
         nop = length(operators)
     end
-    opvalues = Array{Any,2}(steps,1+nop)
-    err = Array{Any,1}(steps)
-    entropy = Array{Any,1}(steps)
+    datalength = Int(ceil(steps/increment))
+    opvalues = Array{Any,2}(datalength,1+nop)
+    err = Array{Any,1}(datalength)
+    entropy = Array{Any,1}(datalength)
 
     for counter = 1:steps
         if counter % 10 == 0
@@ -344,30 +345,36 @@ function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, eth, e
         end
 
         time = counter*total_time/steps
-        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D, tol=tol)
+        err_tmp = tebd_step(mps,hamblocks(time),stepsize,D, tol=tol)
 
-        ## expectation values:
-        opvalues[counter,1] = time
-        if corr_spreading
-            for k = 1:nop
-                m = dist_interval[k]
-                spin_pos = [[sz,Lhalf], [sz,Lhalf+m]]
-                opvalues[counter,k+1] = MPS.traceMPOprod(mps, MPS.MpoFromOperators(spin_pos,L),2) - MPS.traceMPOprod(mps, MPS.MpoFromOperators([spin_pos[1]],L),2)*MPS.traceMPOprod(mps, MPS.MpoFromOperators([spin_pos[2]],L),2)
-                # opvalues[counter,k+1] = MPS.traceMPOprod(mps[1:max(Lhalf,Lhalf+m)],MPS.MpoFromOperators(spin_pos,max(Lhalf,Lhalf+m)),2)
-            end
-        else
-            for k = 1:nop
-                if mpo_to_mps_trafo
-                    opvalues[counter,k+1] = MPS.traceMPOprod(mps,operators[k](time),2)
-                else
-                    opvalues[counter,k+1] = MPS.mpoExpectation(mps,operators[k](time))
+        ## calculate phys quantities after increment steps:
+        if counter % increment == 0
+            phys_ind = Int(ceil(counter/increment))
+            err[phys_ind] = err_tmp
+            opvalues[phys_ind,1] = time
+
+            ## expectation values:
+            if corr_spreading
+                for k = 1:nop
+                    m = dist_interval[k]
+                    spin_pos = [[sz,Lhalf], [sz,Lhalf+m]]
+                    opvalues[phys_ind,k+1] = MPS.traceMPOprod(mps, MPS.MpoFromOperators(spin_pos,L),2) - MPS.traceMPOprod(mps, MPS.MpoFromOperators([spin_pos[1]],L),2)*MPS.traceMPOprod(mps, MPS.MpoFromOperators([spin_pos[2]],L),2)
+                    # opvalues[phys_ind,k+1] = MPS.traceMPOprod(mps[1:max(Lhalf,Lhalf+m)],MPS.MpoFromOperators(spin_pos,max(Lhalf,Lhalf+m)),2)
+                end
+            else
+                for k = 1:nop
+                    if mpo_to_mps_trafo
+                        opvalues[phys_ind,k+1] = MPS.traceMPOprod(mps,operators[k](time),2)
+                    else
+                        opvalues[phys_ind,k+1] = MPS.mpoExpectation(mps,operators[k](time))
+                    end
                 end
             end
-        end
 
-        ## entanglement entropy:
-        if !mpo_to_mps_trafo && entropy_cut > 0
-            entropy[counter] = MPS.entropy(mps,entropy_cut)
+            ## entanglement entropy:
+            if !mpo_to_mps_trafo && entropy_cut > 0
+                entropy[phys_ind] = MPS.entropy(mps,entropy_cut)
+            end
         end
 
 		## ETH calculations:

@@ -9,26 +9,28 @@ subfolder = ""
 
 ## parameters for the spin chain:
 latticeSize = 50
-maxBondDim = [200]
+maxBondDim = [300]
 d = 2
 prec = 1e-20 # for TEBD
 prec_DMRG = 1e-12
 
 ## Ising parameters:
 J0 = 1.0
-h0 = 1.0 #-0.525
-g0 = 0.0 # 0.25
+h0 = -0.525
+g0 = 0.25
 
 ## TEBD parameters:
 total_time_thermal = -im*[0.01, 0.1, 0.3, 0.5, 1.0, 2.0, 4.0, 8.0]/2 # -im*total_time_thermal  for imag time evol
-total_time_quench = 5.0
-steps = 1000
+total_time_quench = 10.0
+steps_th = 1000 # no of steps to construct thermal state
+steps = 2000    # no of steps in real time evolution
+step_incr = 10  # specifies after how many steps phys quantities are calculated
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 
 ## what to do:
 analyze_thermal_states = false  # calculate correlation fct for all beta_th
-analyze_correlations = true     # correlator spreading: calculate <sz sz> for all distances during quench
-perform_th_quench = false       # thermal quench
+analyze_correlations = false     # correlator spreading: calculate <sz sz> for all distances during quench
+perform_th_quench = true       # thermal quench
 perform_gs_quench = false       # ground state quench
 
 ## quench parameters:
@@ -90,7 +92,7 @@ if perform_gs_quench
         println("E0/L = ", E0/(latticeSize-1))
 
         println("\n...performing gs quench...")
-        @time opvalues, err, entropy = TEBD.tebd_simplified(ground,quenchblocks,total_time_quench,steps,maxD,operators, ETH, entropy_cut, tol=prec)
+        @time opvalues, err, entropy = TEBD.tebd_simplified(ground,quenchblocks,total_time_quench,steps,maxD,operators, ETH, entropy_cut, increment=step_incr, tol=prec)
 
         ## Plotting:
         opvalues = real.(opvalues)
@@ -113,7 +115,7 @@ end
 ## FINITE temperature
 if analyze_thermal_states || perform_th_quench || analyze_correlations
     for beta_th in total_time_thermal
-        println("beta_th = ", 2*real(im*beta_th))
+        println("\nbeta_th = ", 2*real(im*beta_th))
         beta_plot = 2*real(im*beta_th)
 
         for maxD in maxBondDim
@@ -121,7 +123,7 @@ if analyze_thermal_states || perform_th_quench || analyze_correlations
 
             ## thermal state MPO:
             IDmpo = MPS.IdentityMPO(latticeSize,d)
-            @time TEBD.tebd_simplified(IDmpo,thermhamblocks,beta_th,steps,maxD,[], ETH, tol=prec)
+            @time TEBD.tebd_simplified(IDmpo,thermhamblocks,beta_th,steps_th,maxD,[], ETH, tol=prec)
             println("trace rho_th(0) = ", MPS.traceMPO(IDmpo,2))
 
             if analyze_thermal_states
@@ -129,7 +131,7 @@ if analyze_thermal_states || perform_th_quench || analyze_correlations
                 corr = []
                 for m = 1:incr:latticeSize-1
                     spin_pos = [[sz,1], [sz,1+m]]
-                    corr_m = MPS.traceMPOprod(IDmpo,MPS.MpoFromOperators(spin_pos,latticeSize),2)
+                    corr_m = MPS.traceMPOprod(IDmpo,MPS.MpoFromOperators(spin_pos,latticeSize),2) - MPS.traceMPOprod(IDmpo,MPS.MpoFromOperators([spin_pos[1]],latticeSize),2)*MPS.traceMPOprod(IDmpo,MPS.MpoFromOperators([spin_pos[2]],latticeSize),2)
                     push!(corr, corr_m)
                     println("<sz_1 sz_",1+m,"> = ", corr_m)
                 end
@@ -137,12 +139,12 @@ if analyze_thermal_states || perform_th_quench || analyze_correlations
                 figure(7)
                 plot(1:incr:latticeSize-1, abs.(corr), ls="", marker="s", label="\$\\beta_{th}\\, / \\,J = $beta_plot, D = $maxD\$")
 
-                save_data(cat(2,collect(1:incr:latticeSize-1),abs.(corr)), string(@__DIR__,"/data/corr_fcts.txt"); header=string(sth2(latticeSize,2*real(im*beta_th),steps,maxD), "# m \t <sz_1 sz_{1+m}>\n"))
+                save_data(cat(2,collect(1:incr:latticeSize-1),real.(corr)), string(@__DIR__,"/data/correlations/corr_fcts.txt"); header=string(sth2(latticeSize,2*real(im*beta_th),steps,maxD), "# m \t <sz_1 sz_{1+m}>\n"))
             end
 
             if perform_th_quench
                 ## thermal quench:
-                @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,operators, ETH, tol=prec)
+                @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,operators, ETH, increment=step_incr, tol=prec)
                 println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
 
                 ## Plotting:
@@ -164,7 +166,7 @@ if analyze_thermal_states || perform_th_quench || analyze_correlations
                 Lhalf = Int(floor(latticeSize/2))
                 dist_interval = cat(1,-Lhalf+1:incr:-1, 1:incr:Lhalf-1)
                 corr_params = ("corr_fct", Lhalf, dist_interval)
-                @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,corr_params, ETH, tol=prec)
+                @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxD,corr_params, ETH, increment=step_incr, tol=prec)
                 println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
 
                 save_data(real.(opvalues), string(@__DIR__,"/data/quench/corr_spreading.txt"); header=string(sth(latticeSize,beta_plot,total_time_quench,steps,maxD), "# t \t <sz_{L/2} sz_{L/2+m}> \t m= ",dist_interval,"\n"))
@@ -216,7 +218,7 @@ end
 if analyze_thermal_states
     figure(7)
     xlabel("\$ m \$")
-    ylabel("\$\\vert \\langle \\sigma_z(1) \\, \\sigma_z(1+m) \\rangle \\vert\$")
+    ylabel("\$\\vert \\langle\\sigma_z(1) \\, \\sigma_z(1+m)\\rangle - \\langle\\sigma_z(1)\\rangle \\langle\\sigma_z(1+m)\\rangle \\vert\$")
     title("correlation function")
     legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
     savefig("figures/"*subfolder*"/corr_fct_distance.pdf")

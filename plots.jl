@@ -1,8 +1,8 @@
 using layout # run this module at first as:  include("layout.jl")
 using PyPlot
 
-function energy_layout(set_xlim)
-    if set_xlim xlim(0,4) end
+function energy_layout(tmax=4)
+    xlim(0,tmax)
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$E(t)\\, / \\,L\$")
     title("\$energy\$")
@@ -10,31 +10,35 @@ function energy_layout(set_xlim)
     layout.nice_ticks()
 end
 
-function magnetization_layout(set_xlim)
-    if set_xlim xlim(0,4) end
+function magnetization_layout(tmax=4)
+    xlim(0,tmax)
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
     title("\$magnetization\$")
     layout.nice_ticks()
 end
 
-function corr_fct_layout(set_xlim)
-    if set_xlim xlim(0,4) end
+function corr_fct_layout(tmax=4)
+    xlim(0,tmax)
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$\\langle \\sigma_z(L/4) \\, \\sigma_z(3/4 L) \\rangle\$")
     title("\$correlation\\, function\$")
     layout.nice_ticks()
 end
 
-function error_layout(set_xlim)
-    if set_xlim xlim(0,5) end
+function error_layout(tmax=5)
+    xlim(0,tmax)
     xlabel("\$t\\, /\\, J \$")
     title("\$error\$")
     layout.nice_ticks()
 end
 
-function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
-    f = open("data/quench/"*subfolder*"/opvalues.txt")
+function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false; specialfile=nothing)
+    if specialfile != nothing
+        f = open("data/quench/"*specialfile)
+    else
+        f = open("data/quench/"*subfolder*"/opvalues.txt")
+    end
     lines = readlines(f)
     close(f)
     sep_inds = findin(lines, [""])
@@ -45,7 +49,7 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
         counter = 1
 
         if i==1
-            steps = parse(split(lines[1])[8])
+            steps = sep_inds[i]-3 # parse(split(lines[1])[8])
             E_mps = Array{Float64}(steps, 2)
             magnetization_mps = Array{Float64}(steps, 2)
             corr_fct_mps = Array{Float64}(steps, 2)
@@ -61,7 +65,7 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
                 counter += 1
             end
         else
-            steps = parse(split(lines[sep_inds[i-1]+1])[8])
+            steps = sep_inds[i]-sep_inds[i-1]-3 # parse(split(lines[sep_inds[i-1]+1])[8])
             E_mps = Array{Float64}(steps, 2)
             magnetization_mps = Array{Float64}(steps, 2)
             corr_fct_mps = Array{Float64}(steps, 2)
@@ -106,7 +110,7 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false)
     end
 end
 
-function correlator_spreading(fig_num, div_lims;linplot=false)
+function correlator_spreading(fig_num, div_lims, xmax=4.0; linplot=false, save_plots=true)
     f = open("data/quench/"*subfolder*"/corr_spreading.txt")
     lines = readlines(f)
     close(f)
@@ -118,7 +122,7 @@ function correlator_spreading(fig_num, div_lims;linplot=false)
         counter = 1
 
         if i==1
-            steps = parse(split(lines[1])[8])
+            steps = sep_inds[i]-3 # parse(split(lines[1])[8])
             dist_grid = Array{Float64}(num_mvals,steps)
             time_grid = Array{Float64}(num_mvals,steps)
             corr_grid = Array{Float64}(num_mvals,steps)
@@ -135,7 +139,7 @@ function correlator_spreading(fig_num, div_lims;linplot=false)
                 counter += 1
             end
         else
-            steps = parse(split(lines[sep_inds[i-1]+1])[8])
+            steps = sep_inds[i]-sep_inds[i-1]-3 # parse(split(lines[sep_inds[i-1]+1])[8])
             dist_grid = Array{Float64}(num_mvals,steps)
             time_grid = Array{Float64}(num_mvals,steps)
             corr_grid = Array{Float64}(num_mvals,steps)
@@ -162,12 +166,12 @@ function correlator_spreading(fig_num, div_lims;linplot=false)
                 semilogy(corr_fct_mps[:,1], abs.(corr_fct_mps[:,j+1]), label="\$m = $m_plot\$")
             end
         end
-        xlim(0,4)
+        xlim(0,xmax)
         xlabel("\$t\\, /\\, J \$")
-        ylabel("\$\\vert\\langle \\sigma_z(L/2) \\, \\sigma_z(L/2+m) \\rangle\\vert\$")
+        ylabel("\$\\vert \\langle\\sigma_{z,L/2}\\,\\sigma_{z,L/2+m}\\rangle - \\langle\\sigma_{z,L/2}\\rangle \\langle\\sigma_{z,L/2+m}\\rangle \\vert\$")
         layout.nice_ticks()
         title("\$\\beta_{th}\\, / \\,J = $beta\$")
-        savefig("figures/"*subfolder*"/corr_fct_dist"*string(i)*".pdf")
+        if save_plots savefig("figures/"*subfolder*"/corr_fct_dist"*string(i)*".pdf") end
 
         figure(fig_num+2*(i-1)+1)
         div_lim = div_lims[i]
@@ -178,14 +182,14 @@ function correlator_spreading(fig_num, div_lims;linplot=false)
         else
             corr_lvls = linspace(minimum(abs.(corr_grid)), maximum(abs.(corr_grid)), 200)
         end
-        contourf(time_grid, dist_grid, abs.(corr_grid), levels=corr_lvls, cmap="jet")#, locator=matplotlib[:ticker][:LogLocator](10))
-        xlim(0,4)
+        contourf(time_grid, dist_grid, abs.(corr_grid), levels=corr_lvls)#, cmap="jet")#, locator=matplotlib[:ticker][:LogLocator](10))
+        xlim(0,xmax)
         title("\$\\beta_{th}\\, / \\,J = $beta\$")
         xlabel("\$t\\, /\\, J \$")
         ylabel("\$m\$")
         colorbar()
         # cbar[:set_labels]("\$\\langle \\sigma_z(L/2) \\, \\sigma_z(L/2+m) \\rangle\$")
-        savefig("figures/"*subfolder*"/corr_spreading"*string(i)*".pdf")
+        if save_plots savefig("figures/"*subfolder*"/corr_spreading"*string(i)*".pdf") end
     end
 end
 
@@ -298,22 +302,22 @@ read_and_plot_Tdependence(7,false)
 subfolder = "thermal/atCriticality"
 
 figure(7)
-energy_layout(true)
+energy_layout()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(8)
 # yscale("symlog", linthreshy=0.1)
-magnetization_layout(true)
+magnetization_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(9)
-corr_fct_layout(true)
+corr_fct_layout()
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 figure(10)
-error_layout(true)
+error_layout()
 savefig("figures/"*subfolder*"/error.pdf")
 
 figure(11)
@@ -347,27 +351,27 @@ for i = 1:length(sizes)
 end
 
 figure(12)
-energy_layout(false)
+energy_layout(2)
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-2,4), useOffset=true)
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(13)
-magnetization_layout(false)
+magnetization_layout(2)
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-2,4), useOffset=true)
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(14)
-corr_fct_layout(false)
+corr_fct_layout(2)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 
 
 ###-----------------------------------------------------------------------------
-### correlation fct in dependence on beta:
+### analyze thermal states - correlation fct in dependence on beta:
 
-f = open("data/correlations/corr_fcts_offcrit.txt")
+f = open("data/correlations/corr_fcts_crit.txt")
 lines = readlines(f)
 close(f)
 
@@ -391,16 +395,16 @@ for i = 1:length(sep_inds)
     end
 
     figure(15)
-    semilogy(corr[:,1], corr[:,2], label="\$\\beta_{th}\\, / \\,J = $beta\$")
+    semilogy(corr[:,1], abs.(corr[:,2]), label="\$\\beta_{th}\\, / \\,J = $beta\$")
 end
 
 figure(15)
 xlabel("\$ m \$")
-ylabel("\$\\vert \\langle \\sigma_z(1) \\, \\sigma_z(1+m) \\rangle \\vert\$")
+ylabel("\$\\vert \\langle\\sigma_{z,1} \\, \\sigma_{z,1+m}\\rangle - \\langle\\sigma_{z,1}\\rangle \\langle\\sigma_{z,1+m}\\rangle \\vert\$")
 title("\$correlation\\, function\$")
-# legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
+legend(loc = "best", numpoints=3, frameon = 0, fancybox = 0, columnspacing = 1)
 layout.nice_ticks()
-savefig("figures/thermal/correlations/corr_fct_distance_offcrit.pdf")
+savefig("figures/thermal/correlations/corr_fct_distance_crit.pdf")
 
 
 
@@ -503,7 +507,7 @@ figure(19)
 axis([0,4,-0.5,-0.29])
 ax = subplot(111)
 ax[:set_yticks]([-0.5,-0.45,-0.4,-0.35,-0.3])
-magnetization_layout(false)
+magnetization_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(20)
@@ -518,13 +522,13 @@ savefig("figures/"*subfolder*"/magnetization_norm.pdf")
 
 figure(21)
 axis([0,4,-0.8e-9,0.1e-10])
-corr_fct_layout(false)
+corr_fct_layout()
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 figure(22)
-error_layout(true)
+error_layout()
 savefig("figures/"*subfolder*"/error.pdf")
 
 
@@ -533,28 +537,29 @@ savefig("figures/"*subfolder*"/error.pdf")
 ### Temperature dependence off criticality:
 
 subfolder = "thermal/offCriticality"
-read_and_plot_Tdependence(23)
+# read_and_plot_Tdependence(23)
+read_and_plot_Tdependence(23; specialfile="thermal/offCriticality/opvalues_latetime.txt")
 subfolder = "groundstate/offCriticality"
-read_and_plot_Tdependence(23)
+read_and_plot_Tdependence(23; specialfile="groundstate/offCriticality/opvalues_latetime.txt")
 subfolder = "thermal/offCriticality"
 
 
 figure(23)
-energy_layout(true)
+energy_layout(10)
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(24)
-magnetization_layout(true)
+magnetization_layout(10)
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(25)
-corr_fct_layout(true)
+corr_fct_layout(10)
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 figure(26)
-error_layout(true)
+error_layout(10)
 savefig("figures/"*subfolder*"/error.pdf")
 
 
@@ -569,21 +574,21 @@ read_and_plot_Tdependence(27)
 subfolder = "thermal/Instantaneous_Tstudies"
 
 figure(27)
-energy_layout(true)
+energy_layout()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(28)
-magnetization_layout(true)
+magnetization_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(29)
-corr_fct_layout(true)
+corr_fct_layout()
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 figure(30)
-error_layout(true)
+error_layout()
 savefig("figures/"*subfolder*"/error.pdf")
 
 
@@ -596,21 +601,21 @@ read_and_plot_Tdependence(31)
 
 
 figure(31)
-energy_layout(true)
+energy_layout()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(32)
-magnetization_layout(true)
+magnetization_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(33)
-corr_fct_layout(true)
+corr_fct_layout()
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
 savefig("figures/"*subfolder*"/corr_fct.pdf")
 
 figure(34)
-error_layout(true)
+error_layout()
 savefig("figures/"*subfolder*"/error.pdf")
 
 
@@ -619,10 +624,13 @@ savefig("figures/"*subfolder*"/error.pdf")
 ### correlator spreading:
 
 subfolder = "thermal/atCriticality"
-correlator_spreading(35,[0.4, 1e-1, 0.5])
+correlator_spreading(35,[1.0, 1.0, 1.0], 4.0)
 
 subfolder = "thermal/offCriticality"
-correlator_spreading(41,[0.4, 1e-1, 1.0];linplot=true)
+correlator_spreading(41,[1.0, 1.0, 0.9], 4.0;linplot=true)
+
+subfolder = "thermal/confinement"
+correlator_spreading(47,[1.0, 1.0, 1.0], 10.0; linplot=true)
 
 
 
