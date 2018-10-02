@@ -10,11 +10,19 @@ function energy_layout(tmax=4)
     layout.nice_ticks()
 end
 
-function magnetization_layout(tmax=4)
+function magnetization_trans_layout(tmax=4)
     xlim(0,tmax)
     xlabel("\$t\\, /\\, J \$")
     ylabel("\$\\langle \\sigma_x(L/2) \\rangle\$")
-    title("\$magnetization\$")
+    title("\$transverse\\, magnetization\$")
+    layout.nice_ticks()
+end
+
+function magnetization_long_layout(tmax=4)
+    xlim(0,tmax)
+    xlabel("\$t\\, /\\, J \$")
+    ylabel("\$\\langle \\sigma_z(L/2) \\rangle\$")
+    title("\$longitudinal\\, magnetization\$")
     layout.nice_ticks()
 end
 
@@ -105,6 +113,99 @@ function read_and_plot_Tdependence(fig_num, plot_scaled_mag=false; specialfile=n
         end
         if plot_scaled_mag
             figure(fig_num+4)
+            plot(magnetization_mps[:,1]/beta, magnetization_mps[:,2])
+        end
+    end
+end
+
+function read_and_plot_Tdependence_extended(fig_num, plot_scaled_mag=false; specialfile=nothing)
+    ## includes transverse and longitudinal magnetization
+    if specialfile != nothing
+        f = open("data/quench/"*specialfile)
+    else
+        f = open("data/quench/"*subfolder*"/opvalues.txt")
+    end
+    lines = readlines(f)
+    close(f)
+    sep_inds = findin(lines, [""])
+    magnetization_long_gs = []
+
+    # thermal_vals = readdlm("data/quench/"*subfolder*"/thermalization.txt")
+
+    for i = 1:length(sep_inds)
+        counter = 1
+
+        if i==1
+            steps = sep_inds[i]-3 # parse(split(lines[1])[8])
+            E_mps = Array{Float64}(steps, 2)
+            magnetization_trans = Array{Float64}(steps, 2)
+            magnetization_long = Array{Float64}(steps, 2)
+            corr_fct_mps = Array{Float64}(steps, 2)
+            error_mps = Array{Float64}(steps, 2)
+            beta = include_string(split(lines[1])[4])
+            L = include_string(split(lines[1])[2])
+            for l = 3 : sep_inds[1]-1
+                line = parse.(split(lines[l]))
+                E_mps[counter,:] = [line[1] line[2]]
+                magnetization_trans[counter,:] = [line[1] line[3]]
+                magnetization_long[counter,:] = [line[1] line[4]]
+                corr_fct_mps[counter,:] = [line[1] line[5]]
+                error_mps[counter,:] = [line[1] line[6]]
+                counter += 1
+            end
+        else
+            steps = sep_inds[i]-sep_inds[i-1]-3 # parse(split(lines[sep_inds[i-1]+1])[8])
+            E_mps = Array{Float64}(steps, 2)
+            magnetization_trans = Array{Float64}(steps, 2)
+            magnetization_long = Array{Float64}(steps, 2)
+            corr_fct_mps = Array{Float64}(steps, 2)
+            error_mps = Array{Float64}(steps, 2)
+            beta = include_string(split(lines[sep_inds[i-1]+1])[4])
+            L = include_string(split(lines[sep_inds[i-1]+1])[2])
+            for l = sep_inds[i-1]+3 : sep_inds[i]-1
+                line = parse.(split(lines[l]))
+                E_mps[counter,:] = [line[1] line[2]]
+                magnetization_trans[counter,:] = [line[1] line[3]]
+                magnetization_long[counter,:] = [line[1] line[4]]
+                corr_fct_mps[counter,:] = [line[1] line[5]]
+                error_mps[counter,:] = [line[1] line[6]]
+                counter += 1
+            end
+        end
+
+        if beta == 0.0
+            magnetization_long_gs = magnetization_long
+            figure(fig_num)
+            plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$ground\\, state\$", c="k")
+            figure(fig_num+1)
+            plot(magnetization_trans[:,1], magnetization_trans[:,2], c="k")
+            # axhline(thermal_vals[i,5], ls="--",c="k")
+            figure(fig_num+2)
+            plot(magnetization_long[:,1], magnetization_long[:,2], c="k")
+            # axhline(thermal_vals[i,5], ls="--",c="k")
+            figure(fig_num+4)
+            plot(corr_fct_mps[:,1], corr_fct_mps[:,2], c="k")
+            figure(fig_num+5)
+            plot(error_mps[:,1], error_mps[:,2], c="k")
+        else
+            figure(fig_num)
+            plot(E_mps[:,1], E_mps[:,2]/(L-1), label="\$\\beta_{th}\\, / \\,J = $beta\$")
+            figure(fig_num+1)
+            plot(magnetization_trans[:,1], magnetization_trans[:,2])
+            figure(fig_num+2)
+            plot(magnetization_long[:,1], magnetization_long[:,2])
+            # axhline(thermal_vals[i,5], ls="--",c="b")
+            if beta>1
+                figure(fig_num+3)
+                plot(magnetization_long[:,1], magnetization_long[:,2]-magnetization_long_gs[:,2],c=string("C",i-2))
+            end
+            figure(fig_num+4)
+            plot(corr_fct_mps[:,1], corr_fct_mps[:,2])
+            figure(fig_num+5)
+            plot(error_mps[:,1], error_mps[:,2])
+        end
+        if plot_scaled_mag
+            figure(fig_num+6)
             plot(magnetization_mps[:,1]/beta, magnetization_mps[:,2])
         end
     end
@@ -307,7 +408,7 @@ savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(8)
 # yscale("symlog", linthreshy=0.1)
-magnetization_layout()
+magnetization_trans_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(9)
@@ -357,7 +458,7 @@ ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-2,4), useOffset=
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(13)
-magnetization_layout(2)
+magnetization_trans_layout(2)
 ax = subplot(111)
 ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-2,4), useOffset=true)
 savefig("figures/"*subfolder*"/magnetization.pdf")
@@ -507,7 +608,7 @@ figure(19)
 axis([0,4,-0.5,-0.29])
 ax = subplot(111)
 ax[:set_yticks]([-0.5,-0.45,-0.4,-0.35,-0.3])
-magnetization_layout()
+magnetization_trans_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(20)
@@ -541,6 +642,8 @@ subfolder = "thermal/offCriticality"
 read_and_plot_Tdependence(23; specialfile="thermal/offCriticality/opvalues_latetime.txt")
 subfolder = "groundstate/offCriticality"
 read_and_plot_Tdependence(23; specialfile="groundstate/offCriticality/opvalues_latetime.txt")
+read_and_plot_Tdependence(23; specialfile="groundstate/offCriticality/opvalues_latetime2.txt")
+# read_and_plot_Tdependence(23; specialfile="groundstate/offCriticality/opvalues.txt")
 subfolder = "thermal/offCriticality"
 
 
@@ -549,7 +652,7 @@ energy_layout(10)
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(24)
-magnetization_layout(10)
+magnetization_trans_layout(10)
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(25)
@@ -578,7 +681,7 @@ energy_layout()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(28)
-magnetization_layout()
+magnetization_trans_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(29)
@@ -605,7 +708,7 @@ energy_layout()
 savefig("figures/"*subfolder*"/energy.pdf")
 
 figure(32)
-magnetization_layout()
+magnetization_trans_layout()
 savefig("figures/"*subfolder*"/magnetization.pdf")
 
 figure(33)
@@ -631,6 +734,51 @@ correlator_spreading(41,[1.0, 1.0, 0.9], 4.0;linplot=true)
 
 subfolder = "thermal/confinement"
 correlator_spreading(47,[1.0, 1.0, 1.0], 10.0; linplot=true)
+
+
+
+########################################################   LONGITUDINAL QUENCHES   ###########################################
+###-----------------------------------------------------------------------------
+### Temperature dependence at criticality:
+
+subfolder = ""
+read_and_plot_Tdependence_extended(53)
+# subfolder = "groundstate/atCriticality"
+# read_and_plot_Tdependence(53,false)
+# subfolder = "thermal/atCriticality"
+
+figure(53)
+energy_layout()
+savefig("figures/"*subfolder*"/energy.pdf")
+
+figure(54)
+magnetization_trans_layout()
+savefig("figures/"*subfolder*"/magnetization_trans.pdf")
+
+figure(55)
+magnetization_long_layout()
+savefig("figures/"*subfolder*"/magnetization_long.pdf")
+
+figure(56)
+xlim(0,4)
+ax = subplot(111)
+ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-2,4), useOffset=true)
+xlabel("\$t\\, /\\, J \$")
+ylabel("\$\\langle \\sigma_{z,L/2} \\rangle_\\beta - \\langle\\sigma_{z,L/2}\\rangle_0\$")
+title("\$longitudinal\\, magnetization\$")
+layout.nice_ticks()
+savefig("figures/"*subfolder*"/magnetization_long_diff.pdf")
+
+figure(57)
+corr_fct_layout()
+ax = subplot(111)
+ax[:ticklabel_format](axis="y", style="scientific", scilimits=(-6,4), useOffset=true)
+savefig("figures/"*subfolder*"/corr_fct.pdf")
+
+figure(58)
+error_layout()
+savefig("figures/"*subfolder*"/error.pdf")
+
 
 
 
