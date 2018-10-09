@@ -239,6 +239,20 @@ function IdentityMPO(L, d)
 
     return mpo
 end
+""" Returns a translationally invariant one-site mpo
+
+```translationMPO(lattice sites, matrix)```"""
+function translationMPO(L, M)
+    # mpo = Array{Array{Complex{Float32},4}}(L)
+    mpo = Array{Any}(L)
+    d=size(M)
+    for i = 1:L
+        mpo[i] = Array{Complex128}(1,d[1],d[2],1)
+        mpo[i][1,:,:,1] = M
+    end
+
+    return mpo
+end
 
 
 """ Returns the Hamiltonian for the Ising model in transverse field as an MPO
@@ -405,7 +419,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             mpsguess = proj*mpsguess
         end
 
-        if size(hefflin)[1] < 10
+        if size(hefflin)[1] < 20
             evals, evecs = eig(Base.full(hefflin))
         else
             evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)

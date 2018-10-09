@@ -60,7 +60,7 @@ end
 Apply two-site operator W (4 indexes) to mps tensors Tl (left) and Tr (right)
 and performs a block decimation (one TEBD step)
 ```block_decimation(W,TL,TR,Dmax,dir) -> Tl, Tr"""
-function block_decimation(W, Tl, Tr, Dmax, dir=0; tol=0)
+function block_decimation(W, Tl, Tr, Dmax, dir=0; tol=0, counter_evo=false)
     ### input:
     ###     W:      time evolution op W=exp(-tau h) of size (d,d,d,d)
     ###     Tl, Tr: mps sites mps[i] and mps[i+1] of size (D1l,d,D1r) and (D2l,d,D2r)
@@ -72,14 +72,24 @@ function block_decimation(W, Tl, Tr, Dmax, dir=0; tol=0)
     stl = size(Tl)
     str = size(Tr)
     if length(stl)==4
+        if counter_evo
+            @tensor blob[-1,-2,-3,-4,-5,-6] := W[2,6,-2,-4]*Tl[-1,2,3,4]*conj(W[3,5,-3,-5])*Tr[4,6,5,-6]
+        else
+            @tensor blob[-1,-2,-3,-4,-5,-6] := Tl[-1,2,-3,4]*W[2,6,-2,-4]*Tr[4,6,-5,-6]
+        end
+        stb = size(blob)
+        theta = reshape(permutedims(blob, [1,3,2,4,5,6]), stb[1]*stb[3],stb[2],stb[4],stb[5]*stb[6])
+        D1l,d,d,D2r = size(theta)
+        # D2l,d,d,D2r = size(Tr)
         Tl = reshape(permutedims(Tl, [1,3,2,4]), stl[1]*stl[3],stl[2],stl[4])
         Tr = reshape(Tr, str[1],str[2],str[3]*str[4])
-    end
-    D1l,d,D1r = size(Tl)
-    D2l,d,D2r = size(Tr)
+    else
+        D1l,d,D1r = size(Tl)
+        D2l,d,D2r = size(Tr)
 
-    # absorb time evolution gate W into Tl and Tr
-    @tensor theta[-1,-2,-3,-4] := Tl[-1,2,3]*W[2,4,-2,-3]*Tr[3,4,-4] # = (D1l,d,d,D2r)
+        # absorb time evolution gate W into Tl and Tr
+        @tensor theta[-1,-2,-3,-4] := Tl[-1,2,3]*W[2,4,-2,-3]*Tr[3,4,-4] # = (D1l,d,d,D2r)
+    end
     theta = reshape(theta, D1l*d,d*D2r)
     U,S,V = svd(theta, thin=true)
     V = V'
@@ -263,7 +273,7 @@ function time_evolve_mpoham(mps, block, total_time, steps, D, increment, entropy
     return expect, entropy, magnetization, correlation, corr_length
 end
 
-function tebd_step(mps, hamblocks, dt, D; tol=0)
+function tebd_step(mps, hamblocks, dt, D; tol=0,counter_evo=false)
     d = size(mps[1])[2]
     L = length(mps)
     if isodd(L)
@@ -285,7 +295,7 @@ function tebd_step(mps, hamblocks, dt, D; tol=0)
     for i = 1:2:L-1
         W = expm(-1im*dt*hamblocks[i])
         W = reshape(W, (d,d,d,d))
-        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, -1, tol=tol)
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, -1, tol=tol,counter_evo=counter_evo)
         total_error += error
         # preserve canonical structure:
         if i < L-2
@@ -305,7 +315,7 @@ function tebd_step(mps, hamblocks, dt, D; tol=0)
     for i = even_start:-2:2
         W = expm(-1im*dt*hamblocks[i])
         W = reshape(W, (d,d,d,d))
-        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, 1, tol=tol)
+        mps[i], mps[i+1], error = block_decimation(W, mps[i], mps[i+1], D, 1, tol=tol,counter_evo=counter_evo)
         total_error += error
         # preserve canonical structure:
         if mpo_to_mps_trafo smpo = MPS.mpo_to_mps(mps) end
@@ -321,26 +331,35 @@ function tebd_step(mps, hamblocks, dt, D; tol=0)
     return total_error
 end
 
-function tebd_simplified(mps, hamblocks, total_time, steps, D, operators, entropy_cut=0; tol=0)
+function tebd_simplified(mps, hamblocks, total_time, steps, D, operators; tol=0, increment=1, entropy_cut=0,counter_evo=false)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
 	### eth = (true,E1,hamiltonian) --> do ETH calcs if true for excited energy E1 wrt hamiltonian
     stepsize = total_time/steps
     nop = length(operators)
-    opvalues = Array{Any,2}(steps,1+nop)
+    opvalues = Array{Any,2}(Int(floor(steps/increment)),1+nop)
     err = Array{Any,1}(steps)
+    datacount=1
     for counter = 1:steps
-        if counter % 10 == 0
-            println("step ",counter," / ",steps)
-        end
+
         time = counter*total_time/steps
-        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D,tol=tol)
-        ## expectation values:
-        opvalues[counter,1] = time
-        for k = 1:nop
-            opvalues[counter,k+1] = MPS.traceMPOprod(mps,operators[k](time),2)
+        err[counter] = tebd_step(mps,hamblocks(time),stepsize,D,tol=tol,counter_evo=counter_evo)
+
+        if counter % increment == 0
+            println("step ",counter," / ",steps)
+            opvalues[datacount,1] = time
+            for k = 1:nop
+                if length(size(mps[1]))==4
+                    opvalues[datacount,k+1] = MPS.traceMPOprod(mps,operators[k](time),2)
+                else
+                    opvalues[datacount,k+1] = MPS.mpoExpectation(mps,operators[k](time))
+                end
+            end
+            datacount+=1
         end
+        ## expectation values:
+
 
         ## entanglement entropy:
         # if entropy_cut > 0
