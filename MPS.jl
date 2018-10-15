@@ -1,5 +1,5 @@
 module MPS
-export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX
+export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX,II
 using TensorOperations
 using LinearMaps
 # define Pauli matrices
@@ -13,6 +13,7 @@ const ZI = kron(sz, si)
 const IZ = kron(si, sz)
 const XI = kron(sx, si)
 const IX = kron(si, sx)
+const II = kron(si, si)
 
 """
 Returns the MPO for a 2-site Hamiltonian
