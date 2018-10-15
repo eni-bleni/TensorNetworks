@@ -244,8 +244,13 @@ function gl_tebd(g,l, hamblocks, total_time, steps, D, operators; tol=0, increme
     datacount=0
     for counter = 1:steps
         time = counter*total_time/steps
+<<<<<<< HEAD
         # if thermal
         #     time = t_th[counter]
+=======
+        if thermal
+            time = t_th[counter]
+>>>>>>> 8479d6868078642b1f048f557bea6ed2817dc51c
         err[counter] = gl_tebd_step(g,l,hamblocks(time),stepsize,D,tol=tol)
         if counter % increment == 0
             datacount+=1
