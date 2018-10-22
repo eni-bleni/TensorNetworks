@@ -87,6 +87,9 @@ for i = 1:length(sep_inds)
         plot(fit.param[3], fit.param[2], ls="", marker="s")
     end
 
+    figure(9)
+    semilogy(collect(1:length(time[ind_min:ind_max])), abs.(fft(sx_t[ind_min:ind_max])), label="\$\\beta_{th}\\, / \\,J = $beta_th\$", c=string("C",i-1))
+
     println("\nbeta_th = ", beta_th)
     if decay_exp
         println("Re(w) = ", fit.param[3], ",  Im(w) = ", fit.param[2])
