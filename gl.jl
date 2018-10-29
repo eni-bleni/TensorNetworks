@@ -1,4 +1,3 @@
-using MPS
 using TensorOperations
 
 function prepareGL(mps,Dmax,tol=0)
@@ -210,9 +209,13 @@ function check_canon(g,l)
     end
 end
 function gl_quench(N,time,steps,maxD,tol,inc)
-    hamblocksTH(time) = isingHamBlocks(N,1,1,0)
-    hamblocks(time) = isingHamBlocks(N,1,1,0)
-    opEmpo = MPS.IsingMPO(N,1,1,0)
+    J0=1
+    h0=1
+    g0=0
+    q = 2*pi*(3/(N-1))
+    hamblocksTH(time) = isingHamBlocks(N,J0,h0,g0)
+    hamblocks(time) = isingHamBlocks(N,J0,h0,g0)
+    opEmpo = MPS.IsingMPO(N,J0,h0,g0)
     opE(time,g,l) = gl_mpoExp(g,l,opEmpo)
     opmag(time,g,l) = localOpExp(g,l,sx,Int(floor(N/2)))
     opnorm(time,g,l) = gl_mpoExp(g,l,MPS.IdentityMPO(N,2))
@@ -222,17 +225,18 @@ function gl_quench(N,time,steps,maxD,tol,inc)
     mps = MPS.randomMPS(N,2,5)
     g,l = prepareGL(mpo,maxD)
     # check_canon(g,l)
-    opvals, err = gl_tebd(g,l,hamblocksTH,-20*im,1000,maxD,ops,tol=tol,increment=inc)
+    # pert_ops = fill(expm(1e-3*im*sx),N)
+    pert_ops = [expm(1e-3*sx*im*x) for x in sin.(q*(-1+(1:N)))]
+    opvals, err = gl_tebd(g,l,hamblocksTH,-2*im,100,maxD,ops,tol=tol,increment=inc,st2=true)
     # check_canon(g,l)
     # println(l[5])
-    pert_ops = fill(expm(1e-3*im*sx),N)
     ops_on_gl(g,l,pert_ops)
-    opvals, err = gl_tebd(g,l,hamblocks,time,steps,maxD,ops,tol=tol,increment=inc)
+    opvals, err = gl_tebd(g,l,hamblocks,time,steps,maxD,ops,tol=tol,increment=inc,st2=true)
     # check_canon(g,l)
     return opvals, err, size(g[Int(floor(N/2))])
 end
 
-function gl_tebd(g,l, hamblocks, total_time, steps, D, operators; tol=0, increment=1, thermal=false)
+function gl_tebd(g,l, hamblocks, total_time, steps, D, operators; tol=0, increment=1, thermal=false, st2=false)
     ### block = hamiltonian
     ### use -im*total_time for imaginary time evolution
     ### assumption: start with rightcanonical mps
@@ -244,13 +248,16 @@ function gl_tebd(g,l, hamblocks, total_time, steps, D, operators; tol=0, increme
     datacount=0
     for counter = 1:steps
         time = counter*total_time/steps
-
-        err[counter] = gl_tebd_step(g,l,hamblocks(time),stepsize,D,tol=tol)
+        if !st2
+            err[counter] = gl_tebd_step(g,l,hamblocks(time),stepsize,D,tol=tol)
+        elseif st2
+            err[counter] = gl_tebd_step_st2(g,l,hamblocks(time),stepsize,D,tol=tol)
+        end
         if counter % increment == 0
             datacount+=1
             println("step ",counter," / ",steps)
             opvalues[datacount,1] = time
-            @sync @parallel for k = 1:nop
+            for k = 1:nop
                 opvalues[datacount,k+1] = operators[k](time,g,l)
             end
         end
@@ -263,21 +270,41 @@ function gl_tebd_step(g,l, hamblocks, dt, D; tol=0)
     N = length(g)
     total_error = 0
     W = reshape.(expm.(-1im*dt*hamblocks),d,d,d,d)
+    # function local_update(k)
+    #     return (k,updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)...)
+    # end
     if imag(dt)==0
-        @sync @parallel for k = 1:2:N-1
+        # results = pmap(local_update,1:2:N-1)
+        # for r in results
+        #     g[r[1]]=r[2]
+        #     l[r[1]+1]=r[3]
+        #     g[r[1]+1]=r[4]
+        #     total_error+=r[5]
+        # end
+        # s = isodd(N) ? N-1 : N-2
+        # results = pmap(local_update,s:-2:1)
+        # for r in results
+        #     g[r[1]]=r[2]
+        #     l[r[1]+1]=r[3]
+        #     g[r[1]+1]=r[4]
+        #     total_error+=r[5]
+        # end
+        Threads.@threads for k = 1:2:N-1
         # W = expm(-1im*dt*hamblocks[k])
         # W = reshape(Ws[k], (d,d,d,d))
         g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)
         total_error += error
         end
         s = isodd(N) ? N-1 : N-2
-        @sync @parallel for k = s:-2:1
+        Threads.@threads for k = s:-2:1
             # W = expm(-1im*dt*hamblocks[k])
             # W = reshape(Ws[k], (d,d,d,d))
-            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)
+        g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)
+
             total_error += error
         end
     else
+        WI = reshape(II, (d,d,d,d))
         for k = 1:N-1
             # W = expm(-1im*dt*hamblocks[k])
             # W = reshape(Ws[k], (d,d,d,d))
@@ -285,7 +312,53 @@ function gl_tebd_step(g,l, hamblocks, dt, D; tol=0)
             total_error += error
         end
         for k = N-1:-1:1
-            WI = reshape(II, (d,d,d,d))
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],WI, D, tol)
+            total_error += error
+        end
+    end
+    return total_error
+end
+
+ function gl_tebd_step_st2(g,l, hamblocks, dt, D; tol=0)
+    d = size(g[1])[2]
+    N = length(g)
+    total_error = 0
+    W = reshape.(expm.(-1im*dt*hamblocks),d,d,d,d)
+    W2 = reshape.(expm.(-1/2*im*dt*hamblocks),d,d,d,d)
+    if imag(dt)==0
+        Threads.@threads for k = 1:2:N-1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W2[k], D, tol)
+            total_error += error
+        end
+        s = isodd(N) ? N-1 : N-2
+        Threads.@threads for k = s:-2:1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)
+            total_error += error
+        end
+        Threads.@threads for k = 1:2:N-1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W2[k], D, tol)
+            total_error += error
+        end
+    else
+        WI = reshape(II, (d,d,d,d))
+        s = isodd(N) ? N-1 : N-2
+        for k=1:N
+            W[k] = isodd(k) ? W[k] : WI
+            W2[k] = iseven(k) ? W2[k] : WI
+        end
+        for k = 1:N-1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W2[k], D, tol)
+            total_error += error
+        end
+        for k = s:-1:1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W[k], D, tol)
+            total_error += error
+        end
+        for k = 1:N-1
+            g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],W2[k], D, tol)
+            total_error += error
+        end
+        for k = N-1:-1:1
             g[k], l[k+1], g[k+1], error = updateBlock(l[k],l[k+1],l[k+2],g[k],g[k+1],WI, D, tol)
             total_error += error
         end

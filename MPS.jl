@@ -1,7 +1,6 @@
-module MPS
-export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX,II
 using TensorOperations
-using LinearMaps
+export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX,II
+
 # define Pauli matrices
 const sx = [0 1; 1 0]
 const sy = [0 1im; -1im 0]
@@ -14,7 +13,6 @@ const IZ = kron(si, sz)
 const XI = kron(sx, si)
 const IX = kron(si, sx)
 const II = kron(si, si)
-
 """
 Returns the MPO for a 2-site Hamiltonian
 """
@@ -87,13 +85,13 @@ function addmpos(mpo1,mpo2,reduce=true,a=1,b=1)
     end
     return mpo
 end
-
-function truncate_svd(U, S, V, D)
-    U = U[:, 1:D]
-    S = S[1:D]
-    V = V[1:D, :]
-    return U, S, V
-end
+#
+# function truncate_svd(U, S, V, D)
+#     U = U[:, 1:D]
+#     S = S[1:D]
+#     V = V[1:D, :]
+#     return U, S, V
+# end
 
 """trancates the full MPS/MPO. There seems to be some bug """
 function truncate2(MPSO,eps=1e-6)
@@ -819,6 +817,4 @@ function SubTraceDistance(MPO,MPS,l)
                 end
     end
     return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
-end
-
 end
