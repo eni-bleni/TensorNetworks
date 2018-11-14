@@ -8,8 +8,8 @@ println("\n---quench.jl------------------------------------")
 subfolder = ""
 
 ## parameters for the spin chain:
-latticeSize = 53
-maxBondDim = 80
+latticeSize = 5
+maxBondDim = 30
 d = 2
 prec = 1e-12
 
@@ -22,16 +22,16 @@ q = 2*pi*(50/(latticeSize-1))
 total_time_thermal = -im*5/2 # -im*total_time_thermal  for imag time evol
 total_time_quench = 8
 steps = 100*total_time_quench
-steps_th = 1000
+steps_th = 200
 increment = 10 # stepsize > 1 after which physical quantities are calculated
 entropy_cut = Int(round(latticeSize/2)) # subsytem size for entanglement entopy; set to 0 to disregard
 rands = 0.2(rand(steps+1)-1/2)
 ##operators to measure and quench parameters
 J(time) = ones(latticeSize)*J0
 h(time) = ones(latticeSize)*h0 +0* 0.05*exp(-2.2(time-sqrt(2.2))^2) + 0*rands[1+Int(floor(steps*time/total_time_quench))] + 0*sin.(q*(-1+(1:latticeSize)))*0.05*exp(-20(time-0.5)^2)
-g(time) = ones(latticeSize)*g0
+gg(time) = ones(latticeSize)*g0
 opmagconst= MPS.MpoFromOperators([[sx,Int((latticeSize+1)/2)]],latticeSize)
-opexpmagconst= MPS.MpoFromOperators([[expm(1e-2*im*sx),Int((latticeSize+1)/2)]],latticeSize)
+opexpmagconst= MPS.MpoFromOperators([[expm(1e-3*im*sx),Int((latticeSize+1)/2)]],latticeSize)
 opmag(time) = opmagconst
 opzmagconst= MPS.MpoFromOperators([[sz,Int((latticeSize+1)/2)]],latticeSize)
 opzmag(time) = opzmagconst
@@ -41,7 +41,7 @@ opcorrconst = opcorrconsts.(0:2:Int((latticeSize-1)/2))
 opz(m) = (time)->MPS.MpoFromOperators([[sz,m]],latticeSize)
 opzconst = opz.(1:2:latticeSize)
 opzt(time) = opzconst
-quenchblocks(time) = TEBD.inhomogeneousIsingHamBlocks(latticeSize,J(time),h(time),g(time))
+quenchblocks(time) = TEBD.inhomogeneousIsingHamBlocks(latticeSize,J(time),h(time),gg(time))
 thermhamblocks(time) = TEBD.isingHamBlocks(latticeSize,J0,h0,g0)
 operators = union([opE opmag],vec(opcorrconst),vec(opzconst))
 operators = [opE opmag opzmag]
@@ -74,13 +74,13 @@ end
         @time TEBD.tebd_simplified(IDmpo,thermhamblocks,total_time_thermal,steps_th,maxBondDim,[],tol=prec,increment=increment)
         println("trace rho_th(0) = ", MPS.traceMPO(IDmpo,2))
         # IDmpo = MPS.multiplyMPOs(z2breaker,IDmpo)
-        pertMPO = MPS.multiplyMPOs(expsxlist,IDmpo)
+        # pertMPO = MPS.multiplyMPOs(expsxlist,IDmpo)
         ## thermal quench:
         @time opvalues, err = TEBD.tebd_simplified(IDmpo,quenchblocks,total_time_quench,steps,maxBondDim,operators,tol=prec,increment=increment)
-        @time opvaluespert, errpert = TEBD.tebd_simplified(pertMPO,quenchblocks,total_time_quench,steps,maxBondDim,operators,tol=prec,increment=increment)
+        # @time opvaluespert, errpert = TEBD.tebd_simplified(pertMPO,quenchblocks,total_time_quench,steps,maxBondDim,operators,tol=prec,increment=increment)
         # println("trace rho_th(t_max) = ", MPS.traceMPO(IDmpo,2))
-        println(errpert)
-        save_data(real.(opvalues),header=string(sth(latticeSize,2*real(im*total_time_thermal),total_time_quench,steps,maxBondDim),"t \t E \t magx \t magz\n"))
+        # println(errpert)
+        # save_data(real.(opvalues),header=string(sth(latticeSize,2*real(im*total_time_thermal),total_time_quench,steps,maxBondDim),"t \t E \t magx \t magz\n"))
 
 
 # ## PLOTTING and SAVING

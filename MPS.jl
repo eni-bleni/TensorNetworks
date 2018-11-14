@@ -1,4 +1,5 @@
 using TensorOperations
+using LinearAlgebra
 export sx,sy,sz,si,s0,ZZ,ZI,IZ,XI,IX,II
 
 # define Pauli matrices
@@ -18,7 +19,7 @@ Returns the MPO for a 2-site Hamiltonian
 """
 function MPOforHam(ham,L)
     d = size(ham)[1]
-    mpo = Array{Any}(L)
+    mpo = Array{Any}(undef,L)
     tmp = reshape(permutedims(ham,[1,3,2,4]),d*d,d*d)
     U,S,V = svd(tmp)
     U = reshape(U*diagm(sqrt.(S)),d,d,size(S)[1])
@@ -45,7 +46,7 @@ end
 function addmpos(mpo1,mpo2,reduce=true,a=1,b=1)
     L = length(mpo1)
     d= size(mpo1[1])[2]
-    mpo = Array{Array{Complex{Float64}}}(L)
+    mpo = Array{Array{Complex{Float64}}}(undef,L)
     mpo[1] = permutedims(cat(1,permutedims(a*mpo1[1],[4,1,2,3]),permutedims(b*mpo2[1],[4,1,2,3])),[2,3,4,1])
     for i = 2:L-1
         mpo[i] = permutedims([permutedims(mpo1[i],[1,4,2,3]) zeros(size(mpo1[i])[1],size(mpo2[i])[4],d,d); zeros(size(mpo2[i])[1],size(mpo1[i])[4],d,d) permutedims(mpo2[i],[1,4,2,3])],[1,3,4,2])
@@ -145,13 +146,13 @@ function LRcanonical(M,dir)
         A,R = qr(M); # M = Q R
         DB = size(R)[1]; # intermediate bond dimension
         A = reshape(A,d,D1,DB);
-        A = permutedims(A,[2,1,3]);
+        A = copy(permutedims(A,[2,1,3]));
     elseif dir == 1
         M = permutedims(M,[1,3,2]);
         M = reshape(M,D1,d*D2);
         A,R = qr(M');
-        A = A';
-        R = R';
+        A = copy(Matrix(A)');
+        R = copy(R');
         DB = size(R)[2];
         A = reshape(A,DB,D2,d);
         A = permutedims(A,[1,3,2]);
@@ -165,10 +166,10 @@ end
 
         ```MpoFromOperators(ops,L) -> mpo```"""
 function MpoFromOperators(ops,L)
-    mpo = Array{Any}(L)
+    mpo = Array{Any}(undef,L)
     d = size(ops[1][1])[1]
     for i = 1:L
-        mpo[i] = reshape(eye(d),1,d,d,1)
+        mpo[i] = reshape(Matrix(I,d),1,d,d,1)
     end
     for i = 1:length(ops)
         mpo[ops[i][2]] = reshape(ops[i][1],1,d,d,1)
@@ -192,7 +193,7 @@ end
 ```correlation_length(mps, d) --> corr, xi, ind_max, a, b```"""
 function correlation_length(mps, d)
     L = length(mps)
-    corr = Array{Any}(L,2)
+    corr = Array{Any}(undef,L,2)
     ind_max = 1
 
     O1 = randn(d,d)
@@ -230,10 +231,10 @@ end
 ```IdentityMPO(lattice sites, phys dims)```"""
 function IdentityMPO(L, d)
     # mpo = Array{Array{Complex{Float32},4}}(L)
-    mpo = Array{Any}(L)
+    mpo = Array{Any}(undef,L)
     for i = 1:L
-        mpo[i] = Array{Complex128}(1,d,d,1)
-        mpo[i][1,:,:,1] = eye(d)
+        mpo[i] = Array{ComplexF64}(undef,1,d,d,1)
+        mpo[i][1,:,:,1] = Matrix(1.0I,d,d)
     end
 
     return mpo
@@ -243,11 +244,24 @@ end
 ```translationMPO(lattice sites, matrix)```"""
 function translationMPO(L, M)
     # mpo = Array{Array{Complex{Float32},4}}(L)
-    mpo = Array{Any}(L)
-    d=size(M)
-    for i = 1:L
-        mpo[i] = Array{Complex128}(1,d[1],d[2],1)
-        mpo[i][1,:,:,1] = M
+    # mpo = Array{Any}(L)
+    # d=size(M)
+    # for i = 1:L
+    #     mpo[i] = Array{ComplexF64}(1,d[1],d[2],1)
+    #     mpo[i][1,:,:,1] = M
+    # end
+    mpo = Array{Any}(undef,L)
+    mpo[1] = Array{ComplexF64}(undef,1,2,2,2)
+    mpo[1][1,:,:,:] = reshape([si M],2,2,2)
+    mpo[L] = Array{ComplexF64}(undef,2,2,2,1)
+    mpo[L][:,:,:,1] = permutedims(reshape([M si], 2,2,2), [3,1,2])
+    for i=2:L-1
+        # hardcoded implementation of index structure (a,i,j,b):
+        help = Array{ComplexF64}(undef,2,2,2,2)
+        help[1,:,:,1] = help[2,:,:,2] = si
+        help[1,:,:,2] = M
+        help[2,:,:,1] = s0
+        mpo[i] = help
     end
 
     return mpo
@@ -261,14 +275,14 @@ function IsingMPO(L, J, h, g, shift=0)
     ### input:   L: lenght of mpo = number of sites/tensors; J,h,g: Ising Hamiltonian params
     ### constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
     ### first site: (i,j,b); last site: (a,i,j)
-    mpo = Array{Any}(L)
-    mpo[1] = Array{Complex128}(1,2,2,3)
+    mpo = Array{Any}(undef,L)
+    mpo[1] = Array{ComplexF64}(undef,1,2,2,3)
     mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz+shift*si/L],2,2,3)
-    mpo[L] = Array{Complex128}(3,2,2,1)
+    mpo[L] = Array{ComplexF64}(undef,3,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex128}(3,2,2,3)
+        help = Array{ComplexF64}(undef,3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
         help[1,:,:,2] = J*sz
         help[1,:,:,3] = h*sx+g*sz+shift*si/L
@@ -290,15 +304,15 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
     ### constructs Hamiltonian sites of size (a,i,j,b) -> a,b: bond dims, i,j: phys dims
     ###                          first site: (i,j,b); last site: (a,i,j)
 
-    mpo = Array{Any}(L)
-    mpo[1] = Array{Complex128}(1,2,2,5)
+    mpo = Array{Any}(undef,L)
+    mpo[1] = Array{ComplexF64}(undef,1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
-    mpo[L] = Array{Complex128}(5,2,2,1)
+    mpo[L] = Array{ComplexF64}(undef,5,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,1,2])
 
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex128}(5,2,2,5)
+        help = Array{ComplexF64}(undef,5,2,2,5)
         help[1,:,:,1] = help[5,:,:,5] = si
         help[1,:,:,2] = Jx*sx
         help[1,:,:,3] = Jy*sy
@@ -326,7 +340,7 @@ function randomMPS(L,d,D)
     ### d: physical dim
     ### D: bond dim
 
-    mps = Array{Any}(L)
+    mps = Array{Any}(undef,L)
     ran = rand(d,D)+1im*rand(d,D)
     ran = ran/norm(ran)
     mps[1] = reshape(ran,1,d,D)
@@ -365,10 +379,10 @@ function DMRG(mps_input, mpo, prec, orth=[])
         return 0
     end
 
-    HL = Array{Any}(L)
-    HR = Array{Any}(L)
-    CL = Array{Any}(Lorth)
-    CR = Array{Any}(Lorth)
+    HL = Array{Any}(undef,L)
+    HR = Array{Any}(undef,L)
+    CL = Array{Any}(undef,Lorth)
+    CR = Array{Any}(undef,Lorth)
     initializeHLR(mps,mpo,HL,HR)
     initializeCLR(mps,CL,CR,orth)
 
@@ -403,7 +417,7 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         szmps = size(mps[j])
         mpsguess = reshape(mps[j],prod(szmps))
         HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
-        hefflin = LinearMap{Complex128}(HeffFun, prod(szmps),ishermitian=true)
+        hefflin = LinearMap{ComplexF64}(HeffFun, prod(szmps),ishermitian=true)
         proj = 1
         for k = 1:length(orth)
             @tensor orthTensor[:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
@@ -474,9 +488,9 @@ end
 function initializeHLR(mps,mpo,HL,HR)
     L = length(mps)
 
-    HR[L] = Array{Complex128}(1,1,1)
+    HR[L] = Array{ComplexF64}(undef,1,1,1)
     HR[L][1,1,1] = 1
-    HL[1] = Array{Complex128}(1,1,1)
+    HL[1] = Array{ComplexF64}(undef,1,1,1)
     HL[1][1,1,1] = 1
 
     for j=L-1:-1:1
@@ -491,11 +505,11 @@ function initializeCLR(mps,CL,CR,orth=[])
     L = length(mps)
 
     for k = 1:length(orth)
-        CR[k] = Array{Array{Complex128,2}}(L)
-        CL[k] = Array{Array{Complex128,2}}(L)
-        CR[k][L] = Array{Complex128}(1,1)
+        CR[k] = Array{Array{ComplexF64,2}}(undef,L)
+        CL[k] = Array{Array{ComplexF64,2}}(undef,L)
+        CR[k][L] = Array{ComplexF64}(undef,1,1)
         CR[k][L][1,1] = 1
-        CL[k][1] = Array{Complex128}(1,1)
+        CL[k][1] = Array{ComplexF64}(undef,1,1)
         CL[k][1][1,1] = 1
         for j=1:L-1
             @tensor begin
@@ -537,7 +551,7 @@ end
 
 function multiplyMPOs(mpo1,mpo2; c=true)
     L = length(mpo1)
-    mpo = Array{Any}(L)
+    mpo = Array{Any}(undef,L)
     for j=1:L
         if c
             @tensor temp[:] := mpo1[j][-1,-3,1,-5] * conj(mpo2[j][-2,-4,1,-6])
@@ -558,21 +572,21 @@ calculates Tr(mpo^n) for n=1,2,4
 function traceMPO(mpo,n=1)
     L = length(mpo)
     if n == 1
-        F = Array{Complex64}(1)
+        F = Array{Complex64}(undef,1)
         F[1] = 1
         for i = 1:L
             @tensor F[-2] := F[1]*mpo[i][1,2,2,-2]
         end
         return F[1]
     elseif n == 2
-        F = Array{Complex64}(1,1)
+        F = Array{Complex64}(undef,1,1)
         F[1,1] = 1
         for i = 1:L
             @tensor F[-3,-4] := F[1,2]*mpo[i][1,3,4,-3]*conj(mpo[i][2,3,4,-4])
         end
         return F[1,1]
     elseif n == 4
-        F = Array{Complex64}(1,1,1,1)
+        F = Array{Complex64}(undef,1,1,1,1)
         F[1,1,1,1] = 1
         for i = 1:L
             @tensor F[-5,-6,-7,-8] := F[1,2,3,4]*mpo[i][1,5,6,-5]*conj(mpo[i][2,7,6,-6])*conj(mpo[i][3,8,7,-7])*mpo[i][4,8,5,-8]
@@ -591,14 +605,14 @@ calculates Tr(mpo1^n * mpo2) for n=1,2
 function traceMPOprod(mpo1,mpo2,n=1)
     L = length(mpo1)
     if n == 1
-        F = Array{Complex64}(1,1)
+        F = Array{Complex64}(undef,1,1)
         F[1,1] = 1
         for i = 1:L
             @tensor F[-3,-4] := F[1,2]*mpo1[i][1,3,4,-3]*conj(mpo2[i][2,3,4,-4])
         end
         return F[1,1]
     elseif n == 2
-        F = Array{Complex64}(1,1,1)
+        F = Array{Complex64}(undef,1,1,1)
         F[1,1,1] = 1
         for i = 1:L
             @tensor F[-4,-5,-6] := F[1,2,3]*mpo1[i][1,4,5,-4]*conj(mpo1[i][2,6,5,-5])*mpo2[i][3,6,4,-6]
@@ -625,7 +639,7 @@ function mpoExpectation(mps1,mpo,mps2=mps1)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex128}(1,1,1)
+    F = Array{ComplexF64}(undef,1,1,1)
     F[1,1,1] = 1
     for i = 1:L
         @tensor F[-1,-2,-3] := F[1,2,3]*mps1[i][3,5,-3]*mpo[i][2,4,5,-2]*conj(mps2[i][1,4,-1])
@@ -643,7 +657,7 @@ function mpoSquaredExpectation(mps, mpo)
         println("ERROR: MPS and MPO do not have same length")
         return 0
     end
-    F = Array{Complex128}(1,1,1,1)
+    F = Array{ComplexF64}(undef,1,1,1,1)
     F[1,1,1,1] = 1
     for i = 1:L
        @tensor F[-1,-2,-3,-4] := F[1,2,3,4]*mps[i][4,5,-4]*mpo[i][3,6,5,-3]*mpo[i][2,4,6,-2]*conj(mps[i][1,4,-1])
@@ -653,7 +667,7 @@ end
 
 """ returns the norm of an MPS """
 function MPSnorm(mps)
-    C = Array{Complex128}(1,1)
+    C = Array{ComplexF64}(undef,1,1)
     C[1,1] = 1
     for i=1:length(mps)
         @tensor C[-1,-2] := mps[i][2,3,-2]*C[1,2]*conj(mps[i][1,3,-1])
@@ -667,7 +681,7 @@ function MPSoverlap(mps1,mps2)
         return 0
     else
         L = length(mps1)
-        C = Array{Complex128}(1,1)
+        C = Array{ComplexF64}(undef,1,1)
         C[1,1] = 1
         for i=1:L
             @tensor C[-1,-2] := mps1[i][1,3,-2]*C[2,1]*conj(mps2[i][2,3,-1])
@@ -690,7 +704,7 @@ function check_LRcanonical(a, dir)
         println("ERROR: choose -1 for leftcanonical or +1 for rightcanonical")
         return false
     end
-    return c ≈ eye(size(c)[1])
+    return c ≈ Matrix(I,size(c)[1])
 end
 
 
@@ -704,7 +718,7 @@ function makeCanonical(mps,n=0)
 
     if length(size(mps[1])) == 4 # make mps out of mpo
         mpo_trafo = 1
-        smps = Array{Any}(L)
+        smps = Array{Any}(undef,L)
         for i = 1:L
             smps[i] = size(mps[i])
             mps[i] = reshape(mps[i], smps[i][1],smps[i][2]*smps[i][3],smps[i][4])
@@ -737,7 +751,7 @@ end
     ```mpo_to_mps(mpo)```"""
 function mpo_to_mps(mpo)
     L = length(mpo)
-    smpo = Array{Any}(L)
+    smpo = Array{Any}(undef,L)
     for i = 1:L
         smpo[i] = size(mpo[i])
         mpo[i] = reshape(mpo[i], smpo[i][1],smpo[i][2]*smpo[i][3],smpo[i][4])
@@ -763,7 +777,7 @@ constructs |Psi><Psi| as an MPO
 """
 function pureDensityMatrix(mps)
     L = length(mps)
-    rho = Array{Any}(L)
+    rho = Array{Any}(undef,L)
     for i = 1:L
         D1,d,D2 = size(mps[i])
         @tensor help[-1,-2,-3,-4,-5,-6] := conj(mps[i][-3,-1,-2])*mps[i][-5,-6,-4]
@@ -792,10 +806,10 @@ Subsystem (1,l)<(1,L) squared trace distance btw MPO and MPS
 """
 function SubTraceDistance(MPO,MPS,l)
     L = length(MPO)
-    A = Array{Complex64}(1,1)
-    B1 = Array{Complex64}(1,1,1)
-    B2 = Array{Complex64}(1,1,1)
-    C = Array{Complex64}(1,1,1,1)
+    A = Array{Complex64}(undef,1,1)
+    B1 = Array{Complex64}(undef,1,1,1)
+    B2 = Array{Complex64}(undef,1,1,1)
+    C = Array{Complex64}(undef,1,1,1,1)
     A[1,1] = 1
     B1[1,1,1] = 1
     B2[1,1,1] = 1

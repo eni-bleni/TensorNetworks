@@ -1,5 +1,6 @@
 using MPS
 using TensorOperations
+using TSVD
 ## We know how certain operations should scale with
 ## bond dimension and system size. We should test this.
 # time = []
@@ -20,6 +21,8 @@ using TensorOperations
 #testing parallel for
 function loop(n)
         t = Array{Any}(n)
+        t2 = Array{Any}(n)
+        r = Array{Any}(n)
         i = 0
     for k = 2.^(3:n)
         i+=1
@@ -34,18 +37,18 @@ function loop(n)
         # t[i] = @elapsed inv(l)
         # U=rand(k,2,k)
         # V=rand(k,2,2,k)
-        M=rand(Complex128,k,k)
-        function lin(v)
-                @tensor r[:] = M[-1,1]*v[1]
-                return r
-        end
-        function linc(v)
-                @tensor r[:] = M'[-1,1]*v[1]
-                return r
-        end
-        t[i]= @elapsed svd(M)
-        linmap = LinearMap{Complex128}(lin,linc,k,k)
-        t[i]/=@elapsed svds(M,nsv=min(100,Int(k/2)))
+        # M=rand(Complex128,k,k)
+        # function lin(v)
+        #         @tensor r[:] = M[-1,1]*v[1]
+        #         return r
+        # end
+        # function linc(v)
+        #         @tensor r[:] = M'[-1,1]*v[1]
+        #         return r
+        # end
+        # t[i]= @elapsed svd(M)
+        # linmap = LinearMap{Complex128}(lin,linc,k,k)
+        # t[i]/=@elapsed svds(M,nsv=min(100,Int(k/2)))
 
         # t[i] = @elapsed il = spdiagm(1./diag(l))
         # t[i] += @elapsed il2 = spdiagm(1./diag(l2))
@@ -65,11 +68,35 @@ function loop(n)
         # hb = r.(1:k)
         # t[i] = @elapsed reshape.(expm.(-1im*hb),2,2,2,2)
         #
-        # @inbounds @simd for j = 1:k
-        #         t[i] -= @elapsed reshape(expm(-1im*hb[j]),2,2,2,2)
+        # func(k) = svd(rand(1000,100))
+        # t[i] = @elapsed pmap(func,1:k)
+        # t[i] /= @elapsed map(func,1:k)
+        mat = rand(k,k)
+        mat = mat'*mat
+        t[i] = @elapsed svd(mat)
+        t2[i] = @elapsed tsvd(mat,min(Int(k/2),300))
+        # mats = fill(mat,k)
+        # t[i]=@elapsed for j = 1:k
+        #         svd(rand(1000,200))
         # end
-
-        println(k,"_ ",t[i])
+        # t2[i]=@elapsed Threads.@threads for j = 1:k
+        #         svd(rand(1000,200))
+        # end
+        # rr=[]
+        # t[i]/=@elapsed @sync for j = 1:k
+        #         @spawn svd(mat)
+        #         # r[i] = fetch()
+        #         push!(rr, @spawn i)
+        # end
+        # # println(rr)
+        # for r in rr
+        #   print(fetch(r))
+        # end
+        #
+        #
+        # t[i]/=@elapsed pmap(svd,mats)
+        println(k,"_ ",t[i],"_",t2[i])
     end
-    return t
+
+    return t, t2
 end
