@@ -790,31 +790,62 @@ end
 """
 Subsystem (1,l)<(1,L) squared trace distance btw MPO and MPS
 """
-function SubTraceDistance(MPO,MPS,l)
+function SubTraceDistance(MPO,MPS,l,n=1)
     L = length(MPO)
-    A = Array{Complex64}(1,1)
-    B1 = Array{Complex64}(1,1,1)
-    B2 = Array{Complex64}(1,1,1)
-    C = Array{Complex64}(1,1,1,1)
-    A[1,1] = 1
-    B1[1,1,1] = 1
-    B2[1,1,1] = 1
-    C[1,1,1,1] = 1
-    for i=1:l
-        @tensor begin
-                    A[-1,-2] := A[1,2]*MPO[i][1,4,3,-1]*conj(MPO[i][2,4,3,-2])
-                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,4,5,-2]*conj(MPS[i][3,5,-3])
-                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,4,-2])*conj(MPS[i][3,5,-3])
-                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,6,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,5,-4]
-                end
+    if n==1
+        A = Array{Complex64}(1,1)
+        B1 = Array{Complex64}(1,1,1)
+        B2 = Array{Complex64}(1,1,1)
+        C = Array{Complex64}(1,1,1,1)
+        A[1,1] = 1
+        B1[1,1,1] = 1
+        B2[1,1,1] = 1
+        C[1,1,1,1] = 1
+        for i=1:l
+            @tensor begin
+                        A[-1,-2] := A[1,2]*MPO[i][1,4,3,-1]*conj(MPO[i][2,4,3,-2])
+                        B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,4,5,-2]*conj(MPS[i][3,5,-3])
+                        B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,4,-2])*conj(MPS[i][3,5,-3])
+                        C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,6,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,5,-4]
+                    end
+        end
+        for i=l+1:L
+            @tensor begin
+                        A[-1,-2] := A[1,2]*MPO[i][1,3,3,-1]*conj(MPO[i][2,4,4,-2])
+                        B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,5,5,-2]*conj(MPS[i][3,4,-3])
+                        B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,5,-2])*conj(MPS[i][3,4,-3])
+                        C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
+                    end
+        end
+        return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
+    elseif n==2
+        A = Array{Complex64}(1,1,1,1)
+        B1 = Array{Complex64}(1,1,1,1)
+        B2 = Array{Complex64}(1,1,1,1)
+        C = Array{Complex64}(1,1,1,1)
+        A[1,1,1,1] = 1
+        B1[1,1,1,1] = 1
+        B2[1,1,1,1] = 1
+        C[1,1,1,1] = 1
+        for i=1:l
+            @tensor begin
+                        A[-1,-2,-3,-4] := A[1,2,3,4]*MPO[i][1,8,5,-1]*MPO[i][2,5,6,-2]*conj(MPO[i][3,7,6,-3])*conj(MPO[i][4,8,7,-4])
+                        B1[-1,-2,-3,-4] := B1[1,2,3,4]*MPS[i][1,5,-1]*MPO[i][2,5,6,-2]*MPO[i][3,6,7,-3]*conj(MPS[i][4,7,-4])
+                        B2[-1,-2,-3,-4] := B2[1,2,3,4]*MPS[i][1,5,-1]*conj(MPO[i][2,6,5,-2])*conj(MPO[i][3,7,6,-3])*conj(MPS[i][4,7,-4])
+                        C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,6,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,5,-4]
+                    end
+        end
+        for i=l+1:L
+            @tensor begin
+                        A[-1,-2,-3,-4] := A[1,2,3,4]*MPO[i][1,5,6,-1]*MPO[i][2,6,5,-2]*conj(MPO[i][3,8,7,-3])*conj(MPO[i][4,7,8,-4])
+                        B1[-1,-2,-3,-4] := B1[1,2,3,4]*MPS[i][1,5,-1]*MPO[i][2,6,7,-2]*MPO[i][3,7,6,-3]*conj(MPS[i][4,5,-4])
+                        B2[-1,-2,-3,-4] := B2[1,2,3,4]*MPS[i][1,5,-1]*conj(MPO[i][2,7,6,-2])*conj(MPO[i][3,6,7,-3])*conj(MPS[i][4,5,-4])
+                        C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
+                    end
+        end
+        return A[1,1,1,1] - B1[1,1,1,1] - B2[1,1,1,1] + C[1,1,1,1]
+    else
+        println("ERROR: choose 1 or 2 as last parameter")
+        return 0
     end
-    for i=l+1:L
-        @tensor begin
-                    A[-1,-2] := A[1,2]*MPO[i][1,3,3,-1]*conj(MPO[i][2,4,4,-2])
-                    B1[-1,-2,-3] := B1[1,2,3]*MPS[i][1,4,-1]*MPO[i][2,5,5,-2]*conj(MPS[i][3,4,-3])
-                    B2[-1,-2,-3] := B2[1,2,3]*MPS[i][1,4,-1]*conj(MPO[i][2,5,5,-2])*conj(MPS[i][3,4,-3])
-                    C[-1,-2,-3,-4] := C[1,2,3,4]*conj(MPS[i][1,5,-1])*MPS[i][2,5,-2]*conj(MPS[i][3,6,-3])*MPS[i][4,6,-4]
-                end
-    end
-    return A[1,1] - B1[1,1,1] - B2[1,1,1] + C[1,1,1,1]
 end
