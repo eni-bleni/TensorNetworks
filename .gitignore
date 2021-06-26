@@ -1,2 +1,6 @@
-.DS_Store
-testing*.jl
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/docs/build/
+/docs/Manifest.toml
+todo.txt

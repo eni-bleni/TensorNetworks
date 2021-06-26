@@ -1,0 +1,11 @@
+name = "TensorNetworks"
+uuid = "bf05fd6d-b814-440f-8e78-cc5435f5625f"
+authors = ["Viktor Svensson <svensson.viktor.91@gmail.com>"]
+version = "2.0.0"
+
+[deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
