@@ -1,11 +1,11 @@
 abstract type AbstractMPS{T <: Number} end
 
 """
-	thermal_states(mps, hamGates, betas, dbeta, order=2)
+	get_thermal_states(mps, hamGates, betas, dbeta, order=2)
 
 Return a list of thermal states with the specified betas
 """
-function thermal_states(mps::AbstractMPS{T}, hamGates, βs, dβ; order=2) where {T}
+function get_thermal_states(mps::AbstractMPS{T}, hamGates, βs, dβ; order=2) where {T}
 	Nβ = length(βs)
 	d = mps
 	mps = identityMPS(mps)
