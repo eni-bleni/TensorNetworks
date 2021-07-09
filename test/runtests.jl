@@ -23,10 +23,10 @@ end
     @test energies ≈ -[Nchain-1, Nchain-1, Nchain-3, Nchain-3, Nchain-3]
 
     #Ground state energy of Ising CFT
-    Nchain = 80
-    Dmax = 20
+    Nchain = 50
+    Dmax = 30
     ham = IsingMPO(Nchain, 1, 1, 0)
     mps = canonicalize(randomOpenMPS(ComplexF64, Nchain, 2, Dmax, purification = false))
     states, energies = eigenstates(mps, ham, 1e-8, 1)
-    @test energies[1]/(Nchain-1) - 4/π < 1/Nchain
+    @test abs(energies[1]/(Nchain-1) + 4/π) < 1/Nchain
 end

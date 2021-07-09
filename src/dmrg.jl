@@ -3,7 +3,7 @@
 
 Use DMRG to calculate the lowest energy eigenstate orthogonal to `orth`
 """
-function DMRG(mps_input, mpo, prec, orth=[])
+function DMRG(mps_input::OpenMPS, mpo::MPO, prec, orth=[]::Array{Any})
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
     mps = centralize(mps_input)
@@ -79,7 +79,6 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
         if canonicity==:left
             j=L+1-j
         end
-
         szmps = size(mps[j])
         mpsguess = vec(mps[j])
         #HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
@@ -135,7 +134,7 @@ function eigenstates(mps, hamiltonian, prec,n)
     states = []
     energies = []
     for k = 1:n
-        @time state, E = DMRG(mps,hamiltonian,prec,states)
+        state, E = DMRG(mps,hamiltonian,prec,states)
         append!(states,[state])
         append!(energies,E)
     end
@@ -202,7 +201,7 @@ end
 
 function getHeff(mps,mpo,HL,HR,i)
     L=length(mps)
-    @tensoropt (-1,-4,-3,-6) Heff[:] := HL[i][-1,1,-4]*mpo[i].data[1,-2,-5,2]*HR[i][-3,2,-6]
+    @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i].data[1,-2,-5,2]*HR[i][-3,2,-6]
     return Heff
 end
 
