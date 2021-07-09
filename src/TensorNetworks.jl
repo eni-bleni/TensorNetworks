@@ -14,7 +14,7 @@ export UMPS, randomUMPS, identityUMPS, transfer_spectrum
 export canonicalize, canonicalize!, iscanonical
 export expectation_value, expectation_values, correlator, connected_correlator
 export transfer_matrix, transfer_matrices, transfer_matrix_squared, transfer_matrices_squared
-export prepare_layers, norm
+export prepare_layers, norm, apply_layers, apply_layers!
 export DMRG, eigenstates
 export isingHamBlocks, isingHamGates, IdentityMPO, IsingMPO, HeisenbergMPO
 export get_thermal_states
@@ -28,7 +28,7 @@ include("transfer.jl")
 include("hamiltonians.jl")
 include("coarsegraining.jl")
 include("tebd.jl")
-include("dmrg.jl")
 include("OpenMPS.jl")
+include("dmrg.jl")
 include("UMPS.jl")
 end # module

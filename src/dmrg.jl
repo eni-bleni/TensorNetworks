@@ -134,7 +134,7 @@ function eigenstates(mps, hamiltonian, prec,n)
     states = []
     energies = []
     for k = 1:n
-        state, E = DMRG(mps,hamiltonian,prec,states)
+        @time state, E = DMRG(mps,hamiltonian,prec,states)
         append!(states,[state])
         append!(energies,E)
     end
