@@ -1,7 +1,7 @@
 name = "TensorNetworks"
 uuid = "bf05fd6d-b814-440f-8e78-cc5435f5625f"
 authors = ["Viktor Svensson <svensson.viktor.91@gmail.com>"]
-version = "2.0.0"
+version = "2.0.1"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"

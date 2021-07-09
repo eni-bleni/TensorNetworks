@@ -233,11 +233,11 @@ end
 
 # This function gives the transfer matrix for a single site which acts on the right.
 """
-	transfer_matrix_rho_squared(A)
+	transfer_matrix_squared(A)
 
 Return the transfer matrix for the tensor `A` squared
 """
-function transfer_matrix_rho_squared(A)
+function transfer_matrix_squared(A)
     sA=size(A)
     function contract(R)
         temp = reshape(R,sA[4],sA[4],sA[4],sA[4])
@@ -257,11 +257,11 @@ end
 
 #The transfer matrix which acts on the left. Singular values should have been absorbed on the left side of A. This is actually slightly more memory efficient than the left transfer matrix, as contracting the first index of A is optimal because that is how it's laid out in the memory.
 """
-	transfer_matrix_rho_squared(Γ::Array{T,3}, Λ::Array{T,1}, dir=:right)
+	transfer_matrix_squared(Γ::Array{T,3}, Λ::Array{T,1}, dir=:right)
 
 Return the transfer matrix for the density matrix squared
 """
-function transfer_matrix_rho_squared(Γ::Array{T,3}, Λ::Array{T,1}, dir=:right) where {T}
+function transfer_matrix_squared(Γ::Array{T,3}, Λ::Array{T,1}, dir=:right) where {T}
 	sA=size(Γ)
 	d=Int(sqrt(sA[2]))
 	A = reshape(A,sA[1],d,d,sA[3])

@@ -2,6 +2,7 @@ module TensorNetworks
 using LinearAlgebra
 using TensorOperations
 using LinearMaps
+using Arpack
 import Distributed.pmap
 #using Arpack
 #using DoubleFloats

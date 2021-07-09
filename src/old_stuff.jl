@@ -278,7 +278,7 @@ function renyi2density_thermal(A,B,lA,lB)
     return -log(maximum(vals[1]))/2
 end
 
-function transfer_matrix_rho_squared(g,l)
+function transfer_matrix_squared(g,l)
     A = deauxillerate_onesite(absorb_l(g,l,:right))
     sA=size(A)
     function contract(R)

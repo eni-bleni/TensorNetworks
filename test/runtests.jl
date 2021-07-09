@@ -11,5 +11,22 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     @test cR ≈ Matrix(1.0I,5,5)
     #trunc = TruncationArgs()
     #truncate_svd(M, )
+end
 
+@testset "DMRG" begin
+    #Test a few low lying eigenstates of a simple Ising
+    Nchain = 5
+    Dmax=20
+    ham = IsingMPO(Nchain, 1, 0, 0)
+    mps = canonicalize(randomOpenMPS(ComplexF64, Nchain, 2, Dmax, purification = false))
+    states, energies = eigenstates(mps, ham, 1e-10, 5)
+    @test energies ≈ -[Nchain-1, Nchain-1, Nchain-3, Nchain-3, Nchain-3]
+
+    #Ground state energy of Ising CFT
+    Nchain = 80
+    Dmax = 20
+    ham = IsingMPO(Nchain, 1, 1, 0)
+    mps = canonicalize(randomOpenMPS(ComplexF64, Nchain, 2, Dmax, purification = false))
+    states, energies = eigenstates(mps, ham, 1e-8, 1)
+    @test energies[1]/(Nchain-1) - 4/π < 1/Nchain
 end

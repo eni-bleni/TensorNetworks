@@ -60,16 +60,15 @@ end
 """
 function multiplyMPOs(mpo1,mpo2; c=true)
     L = length(mpo1)
-    mpo = Array{Any}(L)
+    mpo = similar(mpo1)
     for j=1:L
         if c
-            @tensor temp[:] := mpo1[j][-1,-3,1,-5] * conj(mpo2[j][-2,-4,1,-6])
+            @tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * conj(mpo2[j].data[-2,-4,1,-6])
         else
-            @tensor temp[:] := mpo1[j][-1,-3,1,-5] * mpo2[j][-2,1,-4,-6]
+            @tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * mpo2[j].data[-2,1,-4,-6]
         end
         s=size(temp)
-        mpo[j] = reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6])
+        mpo[j] = MPOsite(reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6]))
     end
-
-    return mpo
+    return MPO(mpo)
 end

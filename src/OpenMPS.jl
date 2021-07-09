@@ -69,6 +69,8 @@ function randomOpenMPS(T::DataType, N, d, D; purification = false,
     return mps
 end
 
+Base.length(mps::OpenMPS) = length(mps.Γ)
+
 """
     identityOpenMPS(datatype, N, d, trunc)
 
@@ -125,6 +127,7 @@ function canonicalize!(mps::OpenMPS)
     mps.Γ[1:N] = Γ
     mps.Λ[1:N+1] = Λ
     mps.error[] += err
+    return
 end
 
 """
@@ -229,7 +232,7 @@ Calculate Γ Λ from a list of tensors M. If M is right canonical, the result is
 """
 function ΓΛ_from_M(M::Array{Array{T,3},1}, trunc::TruncationArgs) where {T}
     N = length(M)
-    #M = deepcopy(M)
+    M = deepcopy(M)
     Γ = similar(M)
     Λ = Array{Array{T,1},1}(undef, N + 1)
     Λ[1] = ones(size(M[1], 1))
@@ -287,7 +290,7 @@ Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
 """
-function expectation_value(mps::OpenMPS, mpo::MPO, site::Int)
+function expectation_value(mps::OpenMPS, mpo::MPO, site::Int = 1)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:right)
     dl = size(mps.Γ[site],1)
@@ -531,6 +534,23 @@ function LinearAlgebra.norm(mps::OpenMPS{T}) where {T}
     M = centralize(mps, N)
     for i = 1:N
         @tensor C[-1, -2] := M[i][2, 3, -2] * C[1, 2] * conj(M[i][1, 3, -1])
+    end
+    return C[1, 1]
+end
+
+"""
+    scalar_product(mps::OpenMPS, mps2::OpenMPS)
+
+Return the scalar product of the two mps's
+"""
+function scalar_product(mps::OpenMPS{T}, mps2::OpenMPS{T}) where {T}
+    C = Array{T,2}(undef, 1, 1)
+    C[1, 1] = one(T)
+    N = length(mps.Γ)
+    M = centralize(mps, N)
+    M2 = centralize(mps2, N)
+    for i = 1:N
+        @tensor C[-1, -2] := M[i][2, 3, -2] * C[1, 2] * conj(M2[i][1, 3, -1])
     end
     return C[1, 1]
 end

@@ -42,6 +42,8 @@ function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{K,1},1}, mps::UMPS; error
 	return UMPS(Γ,map(λ->convert.(T,λ),Λ), purification = mps.purification, truncation= mps.truncation, error = mps.error[] + error)
 end
 
+Base.length(mps::UMPS) = length(mps.Γ)
+
 """
 	convert(Type{UMPS{T}}, mps::UMPS)
 
@@ -140,9 +142,9 @@ end
 function transfer_matrix_squared(mps::UMPS, site::Integer, direction=:left)
 	N = length(mps.Γ)
 	if direction == :left
-		T = transfer_matrix_rho_squared(mps.Γ[site], mps.Λ[mod1(site+1,N)], :left)
+		T = transfer_matrix_squared(mps.Γ[site], mps.Λ[mod1(site+1,N)], :left)
 	elseif direction == :right
-		T = transfer_matrix_rho_squared(mps.Γ[site], mps.Λ[site], :right)
+		T = transfer_matrix_squared(mps.Γ[site], mps.Λ[site], :right)
 	else
 		error("Choose direction :left or :right")
 	end

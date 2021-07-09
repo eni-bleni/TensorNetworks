@@ -49,7 +49,7 @@ function IdentityMPO(L, d)
         mpo[i] = Array{Complex128}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
-    return mpo
+    return MPO(mpo)
 end
 
 """
@@ -72,7 +72,7 @@ function translationMPO(L, M)
         mpo[i] = help
     end
 
-    return mpo
+    return MPO(mpo)
 end
 
 
@@ -97,7 +97,7 @@ function IsingMPO(L, J, h, g, shift=0)
         help[2,:,:,3] = sz
         mpo[i] = help
     end
-    return mpo
+    return MPO(mpo)
 end
 
 """
@@ -130,7 +130,7 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
         help[5,:,:,1] = help[5,:,:,2] = help[5,:,:,3] = help[5,:,:,4] = s0
         mpo[i] = help
     end
-    return mpo
+    return MPO(mpo)
 end
 
 """
