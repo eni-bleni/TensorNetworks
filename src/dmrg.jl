@@ -101,7 +101,9 @@ function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
             evals, evecs = eigen(Matrix(hefflin))
         else
             #println(norm(hefflin*mpsguess))
-            evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
+            #evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
+            evals, evecs = eigsolve(hefflin, mpsguess, 2, :SR, tol=prec, ishermitian=true)
+            evecs = hcat(evecs...)
         end
 
         if !(evals ≈ real(evals))

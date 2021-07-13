@@ -2,12 +2,9 @@ module TensorNetworks
 using LinearAlgebra
 using TensorOperations
 using LinearMaps
-#using Arpack
 using DataFrames
+using KrylovKit
 import Distributed.pmap
-#using Arpack
-#using DoubleFloats
-#using BSON
 
 export TruncationArgs, identityMPS, MPOsite, MPO
 export OpenMPS, randomOpenMPS, identityOpenMPS

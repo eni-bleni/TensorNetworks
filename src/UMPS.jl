@@ -169,7 +169,7 @@ function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
         vals = vals[end:-1:end-nev+1]
         vecs = vecs[:,end:-1:end-nev+1]
     else
-        vals, vecs = eigs(T,nev=nev)
+        vals, vecs = eigsolve(T,nev)#eigs(T,nev=nev)
     end
 	if K == ComplexDF64
 		vals = ComplexDF64.(vals)
@@ -571,7 +571,7 @@ function renyi(mps::UMPS)
 	N = length(mps.Γ)
 	T = eltype(mps.Γ[1])
     transfer_matrix = transfer_matrix_squared(mps,:right)
-	return -log2(eigs(transfer_matrix,nev=1)[1])
+	return -log2(eigsolve(transfer_matrix,1)[1])
 end
 
 # %%

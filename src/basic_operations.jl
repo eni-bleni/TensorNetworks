@@ -275,7 +275,7 @@ function local_ham_eigs(ham_gate, N; nev=2)
 	end
 	map = LinearMap{eltype(ham_gate)}(apply_ham, d^N, ishermitian = true)
 	mat = (d^N < 10 ? Matrix(map) : map)
-	return eigs(map, nev=nev, which=:SR)
+	return eigsolve(map,nev,ishermitian=true) #eigs(map, nev=nev, which=:SR)
 end
 
 """
@@ -303,5 +303,5 @@ function local_ham_eigs_threads(ham_gate, N; nev=2)
 
 	map = LinearMap{eltype(ham_gate)}(apply_ham, d^N, ishermitian = true)
 	mat = (d^N < 10 ? Matrix(map) : map)
-	return eigs(map, nev=nev)
+	return eigsolve(map,nev,ishermitian=true)#eigs(map, nev=nev)
 end
