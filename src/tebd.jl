@@ -1,4 +1,33 @@
 """
+	TEBD!(mps, ham; total_time, steps, increment, observables, trotter_order=2)
+
+Evolve the state using TEBD
+
+See also: [`get_thermal_states`](@ref)
+"""
+function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_order=2)
+    dt = total_time/steps
+    err=Array{Float64,1}(undef, steps);
+    layers = prepare_layers(mps,ham,dt,trotter_order)
+	data = DataFrame()
+    for counter = 1:steps
+		if counter % increment == 1
+            println("step ",counter," / ",steps, "\n Dim ",maximum(length.(mps.Λ)))
+			vals = Dict()
+			vals["time"] = counter*dt
+			vals["error"] = mps.error[]
+			for (name, obs) in pairs(observables)
+				vals[name] = [obs(mps)]
+			end
+			append!(data, vals)
+        end
+        err[counter] = apply_layers!(mps,layers)
+    end
+    return data, err
+end
+
+
+"""
 	apply_layer!(Γout, Λout, Γin, Λin, gates, parity, truncation)
 
 Modify the list of tensor by applying the gates
