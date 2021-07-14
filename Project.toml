@@ -4,7 +4,6 @@ authors = ["Viktor Svensson <svensson.viktor.91@gmail.com>"]
 version = "2.0.1"
 
 [deps]
-Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"

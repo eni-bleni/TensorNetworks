@@ -11,7 +11,7 @@ function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_orde
     layers = prepare_layers(mps,ham,dt,trotter_order)
 	data = DataFrame()
     for counter = 1:steps
-		if counter % increment == 1
+		if counter % increment == 1 || increment==1
             println("step ",counter," / ",steps, "\n Dim ",maximum(length.(mps.Λ)))
 			vals = Dict()
 			vals["time"] = counter*dt
