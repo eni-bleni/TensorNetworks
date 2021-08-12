@@ -7,7 +7,9 @@ const DEFAULT_OPEN_TRUNCATION = TruncationArgs(
     DEFAULT_OPEN_NORMALIZATION,
 )
 
-struct OpenMPS{T<:Complex} <: AbstractMPS{T}
+abstract type AbstractOpenMPS{T<:Complex} <: AbstractMPS{T} end
+
+struct OpenMPS{T<:Complex} <: AbstractOpenMPS{T}
     #In gamma-lambda notation
     Γ::Array{Array{T,3},1}
     Λ::Array{Array{T,1},1}
@@ -69,7 +71,6 @@ function randomOpenMPS(T::DataType, N, d, D; purification = false,
     return mps
 end
 
-Base.length(mps::OpenMPS) = length(mps.Γ)
 
 """
     identityOpenMPS(datatype, N, d, trunc)
@@ -92,7 +93,7 @@ end
 """
     identityOpenMPS(mps)
 
-Return the identity density matrix as a purification
+Return the identity density matrix as a purification, with similar parameters as the input mps
 """
 function identityMPS(mps::OpenMPS{T}) where {T}
     N = length(mps.Γ)
@@ -108,7 +109,7 @@ end
 
 Return the canonical version of the mps
 """
-function canonicalize(mps::OpenMPS)
+function canonicalize(mps::AbstractOpenMPS)
     M = centralize(mps, 1)
     canonicalizeM!(M)
     Γ, Λ, err = ΓΛ_from_M(M, mps.truncation)
@@ -135,7 +136,7 @@ end
 
 Return the mps acted on with `n` layers of the identity
 """
-function canonicalize(mps::OpenMPS,n)
+function canonicalize(mps::AbstractOpenMPS,n)
     mps2 = deepcopy(mps)
     for i in 1:n
         apply_identity_layer!(mps2)
@@ -147,7 +148,7 @@ end
 
 Return the mps acted on with `n` layers of the identity
 """
-function canonicalize!(mps::OpenMPS,n)
+function canonicalize!(mps::AbstractOpenMPS,n)
     for i in 1:n
         apply_identity_layer!(mps)
     end
@@ -159,7 +160,7 @@ end
 
 Check if `mps` is canonical up to `eps`
 """
-function iscanonical(mps::OpenMPS, eps = 1e-12)
+function iscanonical(mps::AbstractOpenMPS, eps = 1e-12)
     N = length(mps.Γ)
     err = 0.0
     for i in 1:N
@@ -186,7 +187,7 @@ end
 
 Contract Λ into Γ, such that site `n` is central. Returns the list of resulting tensors. If the mps is canonical, the output is leftcanonical up to `n` and right canonical afterwards.
 """
-function centralize(mps::OpenMPS, n::Int = 1)
+function centralize(mps::AbstractOpenMPS, n::Int = 1)
     N = length(mps.Γ)
     Γ = mps.Γ
     Λ = mps.Λ
@@ -264,11 +265,11 @@ end
 
 #%% Expectation values
 """
-    expectation_value(mps::OpenMPS, op::Array{T_op,N_op}, site::Int)
+    expectation_value(mps::AbstractOpenMPS, op::Array{T_op,N_op}, site::Int)
 
 Return the expectation value of the gate starting at the `site`
 """
-function expectation_value(mps::OpenMPS, op::Array{T_op,N_op}, site::Int) where {T_op <: Number, N_op}
+function expectation_value(mps::AbstractOpenMPS, op::Array{T_op,N_op}, site::Int) where {T_op <: Number, N_op}
     opLength = operator_length(op)
     if mps.purification
         op = auxillerate(op)
@@ -284,13 +285,13 @@ function expectation_value(mps::OpenMPS, op::Array{T_op,N_op}, site::Int) where 
 end
 
 """
-    expectation_value(mps::OpenMPS, mpo::MPO, site::Int)
+    expectation_value(mps::AbstractOpenMPS, mpo::MPO, site::Int)
 
 Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
 """
-function expectation_value(mps::OpenMPS, mpo::MPO, site::Int = 1)
+function expectation_value(mps::AbstractOpenMPS, mpo::MPO, site::Int = 1)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:right)
     dl = size(mps.Γ[site],1)
@@ -301,13 +302,13 @@ function expectation_value(mps::OpenMPS, mpo::MPO, site::Int = 1)
 end
 
 """
-    expectation_value_left(mps::OpenMPS, mpo::MPO, site::Int)
+    expectation_value_left(mps::AbstractOpenMPS, mpo::MPO, site::Int)
 
 Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_value`](@ref)
 """
-function expectation_value_left(mps::OpenMPS, mpo::MPO, site::Int)
+function expectation_value_left(mps::AbstractOpenMPS, mpo::MPO, site::Int)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:left)
     dr = size(mps.Γ[site+oplength-1],3)
@@ -318,20 +319,20 @@ function expectation_value_left(mps::OpenMPS, mpo::MPO, site::Int)
 end
 
 """
-    expectation_value(mps::OpenMPS, mpo::MPOsite, site::Int)
+    expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Int)
 
 Return the expectation value of the local `mpo` at `site`
 """
-expectation_value(mps::OpenMPS, mpo::MPOsite, site::Int) =     expectation_value(mps,MPO(mpo),site)
+expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Int) = expectation_value(mps,MPO(mpo),site)
 
 """
-    expectation_values(mps, op)
+    expectation_values(mps::AbstractOpenMPS, op)
 
 Return a list of expectation values on every site
 
 See also: [`expectation_value`](@ref)
 """
-function expectation_values(mps::OpenMPS, op)
+function expectation_values(mps::AbstractOpenMPS, op)
     opLength = operator_length(op)
     N = length(mps.Γ)
     vals = Array{ComplexF64,1}(undef, N + 1 - opLength)
@@ -348,7 +349,7 @@ Return the two-site expectation values
 
 See also: [`connected_correlator`](@ref)
 """
-function correlator(mps::OpenMPS{T}, op1, op2, k1::Integer, k2::Integer) where {T}
+function correlator(mps::AbstractOpenMPS{T}, op1, op2, k1::Integer, k2::Integer) where {T}
     N = length(mps.Γ)
 	oplength1 = operator_length(op1)
 	oplength2 = operator_length(op2)
@@ -383,18 +384,18 @@ function correlator(mps::OpenMPS{T}, op1, op2, k1::Integer, k2::Integer) where {
     end
 	return corr[k1:k2,k1:k2]
 end
-function correlator(mps::OpenMPS{T},op1,op2) where {T}
+function correlator(mps::AbstractOpenMPS{T},op1,op2) where {T}
     N = length(mps.Γ)
     oplength1 = operator_length(op1)
 	oplength2 = operator_length(op2)
     correlator(mps::OpenMPS{T},op1,op2,1,N+1-max(oplength1,oplength2))
 end
-function correlator(mps::OpenMPS{T},op) where {T}
+function correlator(mps::AbstractOpenMPS{T},op) where {T}
     N = length(mps.Γ)
     oplength = operator_length(op)
     correlator(mps::OpenMPS{T},op,1,N+1-oplength)
 end
-function correlator(mps::OpenMPS{T}, op, k1::Integer, k2::Integer) where {T}
+function correlator(mps::AbstractOpenMPS{T}, op, k1::Integer, k2::Integer) where {T}
     N = length(mps.Γ)
 	oplength = operator_length(op)
 	emptytransfers = transfer_matrices(mps,:left)
@@ -417,18 +418,18 @@ function correlator(mps::OpenMPS{T}, op, k1::Integer, k2::Integer) where {T}
 	return corr[k1:k2,k1:k2]
 end
 
-function connected_correlator(mps::OpenMPS,op1,op2)
+function connected_correlator(mps::AbstractOpenMPS,op1,op2)
     N = length(mps.Γ)
     oplength1 = operator_length(op1)
 	oplength2 = operator_length(op2)
     return connected_correlator(mps,op1,op2,1,N+1-max(oplength1,oplength2))
 end
-function connected_correlator(mps::OpenMPS,op)
+function connected_correlator(mps::AbstractOpenMPS,op)
     N = length(mps.Γ)
     oplength = operator_length(op)
     return connected_correlator(mps,op,1,N+1-oplength)
 end
-function connected_correlator(mps::OpenMPS, op1, op2, k1::Integer, k2::Integer)
+function connected_correlator(mps::AbstractOpenMPS, op1, op2, k1::Integer, k2::Integer)
     corr = correlator(mps,op1,op2,k1,k2)
     N = length(mps.Γ)
     oplength1 = operator_length(op1)
@@ -448,7 +449,7 @@ function connected_correlator(mps::OpenMPS, op1, op2, k1::Integer, k2::Integer)
     end
     return concorr
 end
-function connected_correlator(mps::OpenMPS, op, k1::Integer, k2::Integer)
+function connected_correlator(mps::AbstractOpenMPS, op, k1::Integer, k2::Integer)
     corr = correlator(mps,op,k1,k2)
     N = length(mps.Γ)
     oplength = operator_length(op)
@@ -466,11 +467,11 @@ end
 # %% TEBD
 
 """
-    apply_layers!(mps,layers)
+    apply_layers!(mps::AbstractOpenMPS,layers)
 
 Modify the mps by acting with the layers of gates
 """
-function apply_layers!(mps::OpenMPS, layers)
+function apply_layers!(mps::AbstractOpenMPS, layers)
     Γ = mps.Γ
     Λ = mps.Λ
     total_error = 0.0
@@ -484,7 +485,7 @@ function apply_layers!(mps::OpenMPS, layers)
     return total_error
 end
 
-function apply_identity_layer!(mps::OpenMPS)
+function apply_identity_layer!(mps::AbstractOpenMPS)
     Γ = mps.Γ
     Λ = mps.Λ
     total_error = 0.0
@@ -503,7 +504,7 @@ end
 
 Modify the mps by acting with the nonunitary layers of gates
 """
-function apply_layers_nonunitary!(mps::OpenMPS, layers)
+function apply_layers_nonunitary!(mps::AbstractOpenMPS, layers)
     Γ = mps.Γ
     Λ = mps.Λ
     total_error = 0.0
@@ -527,7 +528,7 @@ end
 
 Return the norm of the mps
 """
-function LinearAlgebra.norm(mps::OpenMPS{T}) where {T}
+function LinearAlgebra.norm(mps::AbstractOpenMPS{T}) where {T}
     C = Array{T,2}(undef, 1, 1)
     C[1, 1] = one(T)
     N = length(mps.Γ)
@@ -543,7 +544,7 @@ end
 
 Return the scalar product of the two mps's
 """
-function scalar_product(mps::OpenMPS{T}, mps2::OpenMPS{T}) where {T}
+function scalar_product(mps::AbstractOpenMPS{T}, mps2::OpenMPS{T}) where {T}
     C = Array{T,2}(undef, 1, 1)
     C[1, 1] = one(T)
     N = length(mps.Γ)
@@ -560,7 +561,7 @@ end
 
 Return the transfer matrix at `site` with the operator sandwiched
 """
-function transfer_matrix(mps::OpenMPS, op::Array{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
+function transfer_matrix(mps::AbstractOpenMPS, op::Array{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
 	oplength = Int(length(size(op))/2)
 	N = length(mps.Γ)
     if (site+oplength-1) >N

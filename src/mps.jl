@@ -1,4 +1,5 @@
 abstract type AbstractMPS{T <: Number} end
+Base.length(mps::AbstractMPS) = length(mps.Γ)
 
 """
 	get_thermal_states(mps, hamGates, betas, dbeta, order=2)
