@@ -3,10 +3,11 @@
 
 Use DMRG to calculate the lowest energy eigenstate orthogonal to `orth`
 """
-function DMRG(mps_input::OpenMPS, mpo::MPO, prec, orth=[]::Array{Any})
+function DMRG(mps_input::OrthOpenMPS{T}, mpo::MPO, prec, orth=OrthOpenMPS{T}[]::Array{OrthOpenMPS{T},1}) where {T}
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
-    mps = centralize(mps_input)
+    mps = deepcopy(mps_input)
+    canonicalize!(mps)
     L = length(mps)
     Lorth = length(orth)
     if !(norm(mps_input) ≈ 1) || L != length(mpo)
@@ -22,15 +23,14 @@ function DMRG(mps_input::OpenMPS, mpo::MPO, prec, orth=[]::Array{Any})
         return 0
     end
 
-    HL = Array{Any}(undef,L)
-    HR = Array{Any}(undef,L)
-    CL = Array{Any}(undef,Lorth)
-    CR = Array{Any}(undef,Lorth)
+    HL = Array{Array{T,3},1}(undef,L)
+    HR = Array{Array{T,3},1}(undef,L)
+    CL = Array{Array{Array{T,2},1},1}(undef,Lorth)
+    CR = Array{Array{Array{T,2},1},1}(undef,Lorth)
     initializeHLR(mps,mpo,HL,HR)
     initializeCLR(mps,CL,CR,orth)
     Hsquared = multiplyMPOs(mpo,mpo)
-    omps=OpenMPS(mps)
-    E, H2 = real(expectation_value(omps, mpo)), real(expectation_value(omps, Hsquared))
+    E, H2 = real(expectation_value(mps, mpo)), real(expectation_value(mps, Hsquared))
     var = H2 - E^2
     println("E, var = ", E, ", ", var)
     count=1
@@ -38,8 +38,7 @@ function DMRG(mps_input::OpenMPS, mpo::MPO, prec, orth=[]::Array{Any})
         Eprev = E
         mps = sweep(mps,mpo,HL,HR,CL,CR,prec,canonicity,orth)
         canonicity = switch_canonicity(canonicity)
-        omps = OpenMPS(mps)
-        E, H2 = real(expectation_value(omps,mpo)), real(expectation_value(omps, Hsquared))
+        E, H2 = real(expectation_value(mps,mpo)), real(expectation_value(mps, Hsquared))
         #E, H2 = mpoExpectation(mps,mpo), mpoSquaredExpectation(mps,mpo)
         if isapprox(E,real(E); atol = prec)  &&  isapprox(H2,real(H2); atol=prec)
             E, H2 = real(E), real(H2)
@@ -57,6 +56,7 @@ function DMRG(mps_input::OpenMPS, mpo::MPO, prec, orth=[]::Array{Any})
 
     return mps, E
 end
+DMRG(mps::OpenMPS{T}, mpo::MPO, prec, orth=AbstractOpenMPS{ComplexF64}[]::Array{AbstractOpenMPS{T},1}) where {T} = DMRG(OrthOpenMPS(mps),mpo, prec, OrthOpenMPS.(orth))
 
 function switch_canonicity(c)
     if c==:right
@@ -69,7 +69,7 @@ function switch_canonicity(c)
 end
 
 """ sweeps from left to right in the DMRG algorithm """
-function sweep(mps, mpo, HL, HR, CL, CR, prec,canonicity, orth=[])
+function sweep(mps::OrthOpenMPS{T}, mpo, HL, HR, CL, CR, prec,canonicity, orth=OrthOpenMPS{T}[]) where {T}
     ### minimizes E by diagonalizing site by site in the mps from left to right: j=1-->L-1
     ### the resulting sites are left-canonicalized
     L = length(mps)
@@ -132,9 +132,9 @@ end
 
 Return the `n` eigenstates and energies with the lowest energy
 """
-function eigenstates(mps, hamiltonian, prec,n)
-    states = []
-    energies = []
+function eigenstates(mps::AbstractOpenMPS{T}, hamiltonian, prec,n) where {T}
+    states = OrthOpenMPS{T}[]
+    energies = Float64[]
     for k = 1:n
         @time state, E = DMRG(mps,hamiltonian,prec,states)
         append!(states,[state])
@@ -143,12 +143,12 @@ function eigenstates(mps, hamiltonian, prec,n)
     return states, energies
 end
 
-function initializeHLR(mps,mpo,HL,HR)
+function initializeHLR(mps::OrthOpenMPS{T},mpo,HL,HR) where {T}
     L = length(mps)
 
-    HR[L] = Array{ComplexF64}(undef,1,1,1)
+    HR[L] = Array{T}(undef,1,1,1)
     HR[L][1,1,1] = 1
-    HL[1] = Array{ComplexF64}(undef,1,1,1)
+    HL[1] = Array{T}(undef,1,1,1)
     HL[1][1,1,1] = 1
 
     for j=L-1:-1:1
@@ -159,14 +159,14 @@ function initializeHLR(mps,mpo,HL,HR)
     end
 end
 
-function initializeCLR(mps,CL,CR,orth=[])
+function initializeCLR(mps::OrthOpenMPS{T},CL,CR,orth=OrthOpenMPS{T}[]) where {T}
     L = length(mps)
     for k = 1:length(orth)
-        CR[k] = Array{Array{ComplexF64,2}}(undef,L)
-        CL[k] = Array{Array{ComplexF64,2}}(undef,L)
-        CR[k][L] = Array{ComplexF64}(undef,1,1)
+        CR[k] = Array{Array{T,2}}(undef,L)
+        CL[k] = Array{Array{T,2}}(undef,L)
+        CR[k][L] = Array{T}(undef,1,1)
         CR[k][L][1,1] = 1
-        CL[k][1] = Array{ComplexF64}(undef,1,1)
+        CL[k][1] = Array{T}(undef,1,1)
         CL[k][1][1,1] = 1
         for j=1:L-1
             @tensoropt (-2,2,-1,3) CR[k][L-j][-1,-2] := mps[L-j+1][-2,1,2]*conj(orth[k][L-j+1][-1,1,3])*CR[k][L-j+1][3,2]
@@ -189,7 +189,7 @@ function updateHLR(mps,mpo,HL,HR,i,dir)
 
 end
 
-function updateCLR(mps,CL,CR,i,dir,orth=[])
+function updateCLR(mps::OrthOpenMPS{T},CL,CR,i,dir,orth=OrthOpenMPS{T}[]) where {T}
     L = length(mps)
     for k = 1:length(orth)
         if dir==:right

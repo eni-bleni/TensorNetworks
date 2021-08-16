@@ -84,15 +84,15 @@ Returns the Ising hamiltonian as an MPO
 function IsingMPO(L, J, h, g, shift=0)
     mpo = Array{Array{ComplexF64,4}}(undef,L)
     mpo[1] = zeros(ComplexF64,1,2,2,3)
-    mpo[1][1,:,:,:] = reshape([si J*sz h*sx+g*sz+shift*si/L],2,2,3)
+    mpo[1][1,:,:,:] = reshape([si -J*sz -h*sx-g*sz+shift*si/L],2,2,3)
     mpo[L] = zeros(ComplexF64,3,2,2,1)
-    mpo[L][:,:,:,1] = permutedims(reshape([h*sx+g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
+    mpo[L][:,:,:,1] = permutedims(reshape([-h*sx-g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
         help = zeros(ComplexF64,3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
-        help[1,:,:,2] = J*sz
-        help[1,:,:,3] = h*sx+g*sz+shift*si/L
+        help[1,:,:,2] = -J*sz
+        help[1,:,:,3] = -h*sx-g*sz+shift*si/L
         help[2,:,:,1] = help[2,:,:,2] = help[3,:,:,1] = help[3,:,:,2] = s0
         help[2,:,:,3] = sz
         mpo[i] = help

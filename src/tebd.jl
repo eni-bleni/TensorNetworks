@@ -15,7 +15,7 @@ function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_orde
             println("step ",counter," / ",steps, "\n Dim ",maximum(length.(mps.Λ)))
 			vals = Dict()
 			vals["time"] = counter*dt
-			vals["error"] = mps.error[]
+			vals["error"] = mps.error
 			for (name, obs) in pairs(observables)
 				vals[name] = [obs(mps)]
 			end
@@ -47,6 +47,7 @@ function apply_layer!(Γout, Λout, Γin, Λin, gates, parity, truncation)
 	end
 	return total_error
 end
+
 
 """
 	apply_layer_distributed(Γout, Λout, Γin, Λin, gates, parity, truncation)
@@ -107,7 +108,7 @@ function apply_layer(Γin, Λin, gates, parity, truncation)
 		Γout[1] = Γin[1]
 		Γout[end] = Γin[end]
 	end
-	return Γout, Λout, total_error[]::Float64
+	return Γout, Λout, total_error::Float64
 end
 
 """
@@ -132,7 +133,7 @@ function apply_identity_layer(Γin, Λin, parity, truncation)
 		Γout[1] = Γin[1]
 		Γout[end] = Γin[end]
 	end
-	return Γout, Λout, total_error[]
+	return Γout, Λout, total_error
 end
 
 """
@@ -193,7 +194,7 @@ end
 
 #%% Layers
 """
-	prepare_layers!(gates, dt, order)
+	prepare_layers(gates, dt, order)
 
 Return a list of gate layers corresponding to a single step of exp(I `gates`dt)
 """

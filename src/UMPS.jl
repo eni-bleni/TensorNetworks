@@ -5,7 +5,7 @@ const DEFAULT_UMPS_TRUNCATION = TruncationArgs(DEFAULT_UMPS_DMAX, DEFAULT_UMPS_T
 
 import Base:convert
 
-struct UMPS{T <: Number} <: AbstractMPS{T}
+mutable struct UMPS{T <: Number} <: AbstractMPS{T}
     #In gamma-lambda notation
     Γ::Array{Array{T,3},1}
     Λ::Array{Array{T,1},1}
@@ -19,27 +19,27 @@ struct UMPS{T <: Number} <: AbstractMPS{T}
 	#tol::Float64
 
 	# Accumulated error
-	error::Base.RefValue{Float64}
+	error::Float64
 
     #Constructors
 	function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{T,1},1}; truncation::TruncationArgs = DEFAULT_UMPS_TRUNCATION, purification=false, error = 0.0) where {T}
-		new{T}(Γ, Λ, purification,truncation, Ref(error))
+		new{T}(Γ, Λ, purification,truncation, error)
 	end
 
 end
 
 
 function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{T,1},1}, mps::UMPS; error=0) where{T}
-	return UMPS(Γ, Λ, purification = mps.purification, truncation= mps.truncation, error = mps.error[] + error)
+	return UMPS(Γ, Λ, purification = mps.purification, truncation= mps.truncation, error = mps.error + error)
 end
 
 function UMPS(Γ::Array{Array{T,3},1}, mps::UMPS; error=0) where {T}
 	Λ = [ones(T,size(γ,1))/sqrt(size(γ,1)) for γ in Γ]
-	return UMPS(Γ, Λ, purification = mps.purification, truncation= mps.truncation, error = mps.error[] + error)
+	return UMPS(Γ, Λ, purification = mps.purification, truncation= mps.truncation, error = mps.error + error)
 end
 
 function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{K,1},1}, mps::UMPS; error=0) where{T,K}
-	return UMPS(Γ,map(λ->convert.(T,λ),Λ), purification = mps.purification, truncation= mps.truncation, error = mps.error[] + error)
+	return UMPS(Γ,map(λ->convert.(T,λ),Λ), purification = mps.purification, truncation= mps.truncation, error = mps.error + error)
 end
 
 
@@ -89,6 +89,9 @@ end
 function identityMPS(mps::UMPS{T}) where {T}
 	N = length(mps.Γ)
 	d = size(mps.Γ[1],2)
+	if mps.purification
+        d = Int(sqrt(d))
+    end
 	trunc = mps.truncation
 	return identityUMPS(T, N, d, truncation=trunc)
 end
@@ -156,24 +159,26 @@ end
 Return the spectrum of the transfer matrix of the UMPS
 """
 function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
-	if K == ComplexDF64
-		@warn("converting ComplexDF64 to ComplexF64")
-		mps = convert(UMPS{ComplexF64},mps)
-	end
+	# if K == ComplexDF64
+	# 	@warn("converting ComplexDF64 to ComplexF64")
+	# 	mps = convert(UMPS{ComplexF64},mps)
+	# end
     T = transfer_matrix(mps,direction)
 	D = Int(sqrt(size(T,2)))
 	nev = minimum([D^2, nev])
     if size(T,1)<10
         vals, vecs = eigen(Matrix(T))
-        vals = vals[end:-1:end-nev+1]
+        vals = vals[:,end:-1:end-nev+1]
         vecs = vecs[:,end:-1:end-nev+1]
     else
-        vals, vecs = eigsolve(T,nev)#eigs(T,nev=nev)
+		x0 = vec(Matrix{K}(I,D,D))
+        vals, vecsvec = eigsolve(T,x0,nev)#eigs(T,nev=nev)
+		vecs = hcat(vecsvec...)
     end
-	if K == ComplexDF64
-		vals = ComplexDF64.(vals)
-		vecs = ComplexDF64.(vecs)
-	end
+	# if K == ComplexDF64
+	# 	vals = ComplexDF64.(vals)
+	# 	vecs = ComplexDF64.(vecs)
+	# end
 	# tensors = Array{Array{eltype(vecs),2},1}(undef,nev)
 	# for i in 1:nev
 	# 	tensors[i] = reshape(vecs[:,i],D,D)
@@ -254,6 +259,7 @@ function canonicalize!(mps::UMPS)
 	if N==2
 		d = size(mps.Γ[1],2)
 	    mps.Γ[1], mps.Λ[2], mps.Γ[2], err = apply_two_site_identity(mps.Γ, mps.Λ[mod1.(1:3,2)], mps.truncation)
+		mps.error += err
 	end
     return
 end
@@ -408,7 +414,6 @@ function apply_layers!(mps::UMPS, layers)
 	Γ = mps.Γ
 	Λ = mps.Λ
 	for n in 1:Nl
-		println(size.(Λ))
 		layer = layers[n][mod1.((1:N) .+ (n-1), length(layers[n]))]
 		total_error += apply_layer!(Γ, Λ, Γ, view(Λ, mod1.(1:N+1,N)), layer, 1, mps.truncation)
 		Γ = Γ[mod1.(2:N+1,N)]
@@ -416,7 +421,7 @@ function apply_layers!(mps::UMPS, layers)
 	end
 	mps.Γ[1:N] = Γ[mod1.((1:N) .- Nl,N)]
 	mps.Λ[1:N] = Λ[mod1.((1:N) .- Nl,N)]
-	mps.error[] += total_error
+	mps.error += total_error
 	return total_error
 end
 
@@ -439,23 +444,19 @@ function apply_layers_nonunitary!(mps::UMPS, layers)
 			Γ = @view Γ[mod1.(1:N+2,N)]
 			Λ = @view Λ[mod1.(1:N+3,N)]
 		end
-		total_error += apply_layer_nonunitary!(Γ, Λ, Γ, Λ, layers[n], n, dir, mps.truncation)
+		#total_error += apply_layer_nonunitary!(Γ, Λ, Γ, Λ, layers[n], n, dir, mps.truncation)
+		total_error += apply_layer_nonunitary!(Γ, Λ, layers[n], n, dir, mps.truncation)
 	end
 	mps.Γ[1:N] = @view Γ[1:N]
 	mps.Λ[1:N] = @view Λ[1:N]
-	mps.error[] += total_error
+	mps.error += total_error
 	return total_error
 end
 
-function prepare_layers(mps::UMPS, hamiltonian_gates, dt, trotter_order)
-	gates = (mps.purification ? auxillerate.(hamiltonian_gates) : hamiltonian_gates)
-	return prepare_layers(gates,dt,trotter_order)
-end
 
 #%% Expectation values
 function expectation_value(mps::UMPS, op, site::Int)
-    opDims = size(op)
-	opLength=Int(length(opDims)/2)
+	opLength=operator_length(op)
 	N = length(mps.Γ)
 	if mps.purification
 		op = auxillerate(op)
@@ -557,7 +558,7 @@ function renyi(mps::UMPS, n)
 	leftVec = vec(@tensor id[-1,-2]*id[-3,-4])
 	Λsquares = diagm.(mps.Λ .^2)
 	rightVecs = map(k->vec(@tensor Λsquares[-1,-2]*Λsquares[-3,-4])', 1:N)
-    vals = []
+    vals = Float64[]
     for k in 1:n
 		leftVec = transfer_matrices[mod1(k,N)]*leftVec
 		val = rightVecs[mod1(k+1,N)] * leftVec
@@ -587,7 +588,7 @@ function writeUMPS(parent, mps)
 	write(parent, "Dmax", mps.truncation.Dmax)
 	write(parent, "tol", mps.truncation.tol)
 	write(parent, "normalize", mps.truncation.normalize)
-	write(parent, "error", mps.error[])
+	write(parent, "error", mps.error)
 end
 
 function readUMPS(io)

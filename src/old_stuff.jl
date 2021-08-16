@@ -212,7 +212,7 @@ function ground_state(hamiltonian,trunc::TruncationArgs; test=false, verbose=fal
     #     return
     # end
     beta = 0
-    energy = []
+    energy = Float64[]
     Udt2 = reshape(exp(-dt*hamiltonian/2),d,d,d,d);
     Udt = reshape(exp(-dt*hamiltonian),d,d,d,d);
     mpsnorm = 0.5*(TN.expectation_value_two_site(B,A,lB,lA,lB,idBlock)+TN.expectation_value_two_site(A,B,lA,lB,lA,idBlock))
