@@ -6,13 +6,15 @@ using DataFrames
 using KrylovKit
 using DoubleFloats
 using Combinatorics
+using SparseArrays
 using SparseArrayKit
+
 import Distributed.pmap
 
 export TruncationArgs, identityMPS, MPOsite, MPO
 export OpenMPS, randomOpenMPS, identityOpenMPS
 export OrthOpenMPS, randomOrthOpenMPS, identityOrthOpenMPS
-export UMPS, randomUMPS, identityUMPS, transfer_spectrum
+export UMPS, randomUMPS, identityUMPS, transfer_spectrum, boundary
 export canonicalize, canonicalize!, iscanonical
 export expectation_value, expectation_values, correlator, connected_correlator
 export transfer_matrix, transfer_matrices, transfer_matrix_squared, transfer_matrices_squared
