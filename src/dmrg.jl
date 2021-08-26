@@ -3,17 +3,14 @@
 
 Use DMRG to calculate the lowest energy eigenstate orthogonal to `orth`
 """
-function DMRG(mps_input::OrthOpenMPS{T}, mpo::MPO, prec, orth=OrthOpenMPS{T}[]::Array{OrthOpenMPS{T},1}) where {T}
+function DMRG(mps_input::OrthOpenMPS{T}, mpo::AbstractMPO, prec, orth=OrthOpenMPS{T}[]::Vector{OrthOpenMPS{T}}) where {T}
     ### input: canonical random mps
     ### output: ground state mps, ground state energy
-    mps = deepcopy(mps_input)
+    mps = copy(mps_input)
     canonicalize!(mps)
-    L = length(mps)
-    Lorth = length(orth)
-    if !(norm(mps_input) ≈ 1) || L != length(mpo)
-        println("ERROR in DMRG: non-normalized MPS as input or wrong length")
-        return 0
-    end
+    L = length(mps_input)
+    Lorth = length(orth) 
+    @assert ((norm(mps_input) ≈ 1) && L == length(mpo)) "ERROR in DMRG: non-normalized MPS as input or wrong length"
     if check_LRcanonical(mps[L],:right)
         canonicity=:right
     elseif check_LRcanonical(mps[1],:left)
@@ -56,7 +53,6 @@ function DMRG(mps_input::OrthOpenMPS{T}, mpo::MPO, prec, orth=OrthOpenMPS{T}[]::
 
     return mps, E
 end
-DMRG(mps::OpenMPS{T}, mpo::MPO, prec, orth=AbstractOpenMPS{ComplexF64}[]::Array{AbstractOpenMPS{T},1}) where {T} = DMRG(OrthOpenMPS(mps),mpo, prec, OrthOpenMPS.(orth))
 
 function switch_canonicity(c)
     if c==:right
@@ -80,11 +76,11 @@ function sweep(mps::OrthOpenMPS{T}, mpo, HL, HR, CL, CR, prec,canonicity, orth=O
             j=L+1-j
         end
         szmps = size(mps[j])
-        mpsguess = vec(mps[j])
+        mpsguess = vec(mps.Γ[j])
         #HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
 
         for k = 1:N_orth
-            @tensoropt (1,-1,2,-3) orthTensors[k][:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k][j][1,-2,2])
+            @tensoropt (1,-1,2,-3) orthTensors[k][:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k].Γ[j][1,-2,2])
         end
         function HeffFun(Avec)
             A = reshape(Avec, szmps)
@@ -118,21 +114,22 @@ function sweep(mps::OrthOpenMPS{T}, mpo, HL, HR, CL, CR, prec,canonicity, orth=O
         Aj,R = LRcanonical(Mj,switch_canonicity(canonicity))
         mps[j] = Aj
         if canonicity==:right
-            @tensor mps[j+1][-1,-2,-3] := R[-1,1]*mps[j+1][1,-2,-3];
+            @tensor mps.Γ[j+1][-1,-2,-3] := R[-1,1]*mps.Γ[j+1][1,-2,-3];
         elseif canonicity==:left
-            @tensor mps[j-1][-1,-2,-3] := R[1,-3]*mps[j-1][-1,-2,1];
+            @tensor mps.Γ[j-1][-1,-2,-3] := R[1,-3]*mps.Γ[j-1][-1,-2,1];
         end
         updateCLR(mps,CL,CR,j,canonicity,orth)
         updateHLR(mps,mpo,HL,HR,j,canonicity)
     end
     return mps
 end
+
 """
     eigenstates(mps, hamiltonian, prec, n)
 
 Return the `n` eigenstates and energies with the lowest energy
 """
-function eigenstates(mps::AbstractOpenMPS{T}, hamiltonian, prec,n) where {T}
+function eigenstates(mps::OrthOpenMPS{T}, hamiltonian, prec,n) where {T}
     states = OrthOpenMPS{T}[]
     energies = Float64[]
     for k = 1:n
@@ -142,6 +139,10 @@ function eigenstates(mps::AbstractOpenMPS{T}, hamiltonian, prec,n) where {T}
     end
     return states, energies
 end
+eigenstates(mps::OpenMPS, hamiltonian, prec,n) = eigenstates(OrthOpenMPS(mps), hamiltonian, prec,n)
+DMRG(mps::OpenMPS, mpo::AbstractMPO, prec, orth=OrthOpenMPS{T}[]) where {T} = DMRG(OrthOpenMPS(mps),mpo, prec, orth)
+
+
 
 function initializeHLR(mps::OrthOpenMPS{T},mpo,HL,HR) where {T}
     L = length(mps)
@@ -150,17 +151,18 @@ function initializeHLR(mps::OrthOpenMPS{T},mpo,HL,HR) where {T}
     HR[L][1,1,1] = 1
     HL[1] = Array{T}(undef,1,1,1)
     HL[1][1,1,1] = 1
-
+    Γ = mps.Γ
     for j=L-1:-1:1
-        @tensoropt (-1,1,-3,3) HR[j][-1,-2,-3] := conj(mps[j+1][-1,4,1])*mpo[j+1].data[-2,4,5,2]*mps[j+1][-3,5,3]*HR[j+1][1,2,3]
+        @tensoropt (-1,1,-3,3) HR[j][-1,-2,-3] := conj(Γ[j+1][-1,4,1])*mpo[j+1].data[-2,4,5,2]*Γ[j+1][-3,5,3]*HR[j+1][1,2,3]
     end
     for j=2:L
-        @tensoropt (1,3,-1,-3) HL[j][-1,-2,-3] := HL[j-1][1,2,3]*conj(mps[j-1][1,4,-1])*mpo[j-1].data[2,4,5,-2]*mps[j-1][3,5,-3]
+        @tensoropt (1,3,-1,-3) HL[j][-1,-2,-3] := HL[j-1][1,2,3]*conj(Γ[j-1][1,4,-1])*mpo[j-1].data[2,4,5,-2]*Γ[j-1][3,5,-3]
     end
 end
 
 function initializeCLR(mps::OrthOpenMPS{T},CL,CR,orth=OrthOpenMPS{T}[]) where {T}
     L = length(mps)
+    Γ = mps.Γ
     for k = 1:length(orth)
         CR[k] = Array{Array{T,2}}(undef,L)
         CL[k] = Array{Array{T,2}}(undef,L)
@@ -168,9 +170,10 @@ function initializeCLR(mps::OrthOpenMPS{T},CL,CR,orth=OrthOpenMPS{T}[]) where {T
         CR[k][L][1,1] = 1
         CL[k][1] = Array{T}(undef,1,1)
         CL[k][1][1,1] = 1
+        Γo = orth[k].Γ
         for j=1:L-1
-            @tensoropt (-2,2,-1,3) CR[k][L-j][-1,-2] := mps[L-j+1][-2,1,2]*conj(orth[k][L-j+1][-1,1,3])*CR[k][L-j+1][3,2]
-            @tensoropt (2,-2,1,-1) CL[k][1+j][-1,-2] := mps[j][2,3,-2]*conj(orth[k][j][1,3,-1])*CL[k][j][1,2]
+            @tensoropt (-2,2,-1,3) CR[k][L-j][-1,-2] := Γ[L-j+1][-2,1,2]*conj(Γo[L-j+1][-1,1,3])*CR[k][L-j+1][3,2]
+            @tensoropt (2,-2,1,-1) CL[k][1+j][-1,-2] := Γ[j][2,3,-2]*conj(Γo[j][1,3,-1])*CL[k][j][1,2]
 
         end
     end
@@ -179,24 +182,26 @@ end
 """ Update HL, HR, when tensor i has been updated in a dir-sweep"""
 function updateHLR(mps,mpo,HL,HR,i,dir)
     L = length(mps)
-
+    Γ = mps.Γ
     if dir==:right
-        @tensoropt (1,3,-1,-3) HL[i+1][-1,-2,-3] := HL[i][1,2,3]*conj(mps[i][1,4,-1])*mpo[i].data[2,4,5,-2]*mps[i][3,5,-3]
+        @tensoropt (1,3,-1,-3) HL[i+1][-1,-2,-3] := HL[i][1,2,3]*conj(Γ[i][1,4,-1])*mpo[i].data[2,4,5,-2]*Γ[i][3,5,-3]
     end
     if dir==:left
-        @tensoropt (-1,1,-3,3) HR[i-1][-1,-2,-3] := conj(mps[i][-1,4,1])*mpo[i].data[-2,4,5,2]*mps[i][-3,5,3]*HR[i][1,2,3]
+        @tensoropt (-1,1,-3,3) HR[i-1][-1,-2,-3] := conj(Γ[i][-1,4,1])*mpo[i].data[-2,4,5,2]*Γ[i][-3,5,3]*HR[i][1,2,3]
     end
 
 end
 
 function updateCLR(mps::OrthOpenMPS{T},CL,CR,i,dir,orth=OrthOpenMPS{T}[]) where {T}
     L = length(mps)
+    Γ = mps.Γ
     for k = 1:length(orth)
+        Γo = orth[k].Γ
         if dir==:right
-            @tensoropt (2,-2,1,-1) CL[k][i+1][-1,-2] := mps[i][2,3,-2]*conj(orth[k][i][1,3,-1])*CL[k][i][1,2]
+            @tensoropt (2,-2,1,-1) CL[k][i+1][-1,-2] := Γ[i][2,3,-2]*conj(Γo[i][1,3,-1])*CL[k][i][1,2]
         end
         if dir==:left
-            @tensoropt (-1,-2,3,2) CR[k][i-1][-1,-2] := mps[i][-2,1,2]*conj(orth[k][i][-1,1,3])*CR[k][i][3,2]
+            @tensoropt (-1,-2,3,2) CR[k][i-1][-1,-2] := Γ[i][-2,1,2]*conj(Γo[i][-1,1,3])*CR[k][i][3,2]
         end
     end
 end

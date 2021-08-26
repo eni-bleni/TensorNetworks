@@ -7,7 +7,17 @@ const DEFAULT_OPEN_TRUNCATION = TruncationArgs(
     DEFAULT_OPEN_NORMALIZATION,
 )
 
-
+Base.firstindex(mps::OpenMPS) = 1
+Base.lastindex(mps::OpenMPS) = length(mps.Γ)
+Base.IndexStyle(::Type{<:OpenMPS}) = IndexLinear()
+function Base.getindex(mps::OpenMPS, i::Integer) 
+	LinkSite(mps.Γ[i], mps.Λ[i], mps.Λ[i+1], mps.purification)
+end
+function Base.setindex!(mps::OpenMPS{T}, v::LinkSite{K}, i::Integer) where {T,K}
+	mps.Γ[i] = convert.(T, v.Γ)
+	mps.Λ[i] = convert.(T, v.Λ1)
+	mps.Λ[i+1] = convert.(T, v.Λ2)
+end
 
 #%% Constructors
 function OpenMPS(
@@ -26,7 +36,6 @@ function OpenMPS(
     mps::OpenMPS;
     error = 0.0,
 ) where {T}
- 
     OpenMPS{T}(Γ, Λ, mps.purification, mps.truncation, mps.error + error)
 end
 function OpenMPS(
@@ -37,10 +46,12 @@ function OpenMPS(
     Γ, Λ, error = ΓΛ_from_M(M, truncation)
     OpenMPS{T}(Γ, Λ, purification, truncation, error)
 end
-function OpenMPS(mps::OrthOpenMPS) where {T}
+function OpenMPS(mps::OrthOpenMPS{T}) where {T}
     Γ, Λ, error = ΓΛ_from_M(mps.Γ, mps.truncation)
     OpenMPS{T}(Γ, Λ, mps.purification, mps.truncation, error)
 end
+
+Base.copy(mps::OpenMPS{T}) where {T} = OpenMPS([copy(getfield(mps, k)) for k = 1:length(fieldnames(OpenMPS))]...) 
 
 """
     randomOpenMPS(datatype, N, d, D, pur=false, trunc)
@@ -149,11 +160,11 @@ function iscanonical(mps::OpenMPS, eps = 1e-12)
 end
 
 """
-    centralize(mps::OpenMPS,n::Int=1)
+    centralize(mps::OpenMPS,n::Integer=1)
 
 Contract Λ into Γ, such that site `n` is central. Returns the list of resulting tensors. If the mps is canonical, the output is leftcanonical up to `n` and right canonical afterwards.
 """
-function centralize(mps::OpenMPS{T}, n::Int = 1) where {T}
+function centralize(mps::OpenMPS{T}, n::Integer = 1) where {T}
     N = length(mps.Γ)
     Γ = mps.Γ
     Λ = mps.Λ
@@ -162,7 +173,7 @@ end
 
 function M_from_ΓΛ(Γ, Λ, n=1)
     N = length(Γ)
-    M = deepcopy(Γ)
+    M = copy(Γ)
     for k = N:-1:n+1
         absorb_l!(M[k], Γ[k], Λ[k+1])
     end
@@ -175,13 +186,13 @@ end
 
 
 """
-    canonicalizeM(M::Array{Array{T,3},1}, n::Int=1)
+    canonicalizeM(M::Array{Array{T,3},1}, n::Integer=1)
 
 Make M left canonical up to site `n` and right canonical afterwards.
 """
-function canonicalizeM(M_in::Array{Array{T,3},1}, n::Int = 0) where {T}
+function canonicalizeM(M_in::Array{Array{T,3},1}, n::Integer = 0) where {T}
     N = length(M)
-    M = deepcopy(M_in)
+    M = copy(M_in)
     for i = 1:n-1
         M[i], R, DB = LRcanonical(M[i], :left)
         if i < N
@@ -198,11 +209,11 @@ function canonicalizeM(M_in::Array{Array{T,3},1}, n::Int = 0) where {T}
 end
 
 """
-    canonicalizeM!(M::Array{Array{T,3},1}, n::Int=1)
+    canonicalizeM!(M::Array{Array{T,3},1}, n::Integer=1)
 
 Make mps left canonical up to site `n` and right canonical afterwards.
 """
-function canonicalizeM!(M::Array{Array{T,3},1}, n::Int = 0) where {T}
+function canonicalizeM!(M::Array{Array{T,3},1}, n::Integer = 0) where {T}
     N = length(M)
     for i = 1:n-1
         M[i], R, DB = LRcanonical(M[i], :left)
@@ -227,8 +238,8 @@ Calculate Γ Λ from a list of tensors M. If M is right canonical, the result is
 """
 function ΓΛ_from_M(M::Array{Array{T,3},1}, trunc::TruncationArgs) where {T}
     N = length(M)
-    M = deepcopy(M)
-    Γ = similar(M)
+    M = copy(M)
+    Γ = copy(M)
     Λ = Array{Array{T,1},1}(undef, N + 1)
     Λ[1] = ones(size(M[1], 1))
     total_error = 0.0
@@ -259,33 +270,13 @@ end
 
 #%% Expectation values
 """
-    expectation_value(mps::OpenMPS, op::Array{T_op,N_op}, site::Int)
-
-Return the expectation value of the gate starting at the `site`
-"""
-function expectation_value(mps::OpenMPS, op::Array{T_op,N_op}, site::Int) where {T_op <: Number, N_op}
-    opLength = operator_length(op)
-    if mps.purification
-        op = auxillerate(op)
-    end
-    if opLength == 1
-        val = expectation_value_one_site(mps.Λ[site], mps.Γ[site], mps.Λ[site+1], op)
-    elseif opLength == 2
-        val = expectation_value_two_site(mps.Γ[site:site+1], mps.Λ[site:site+2], op)
-    else
-        error("Expectation value not implemented for operators of this size")
-    end
-    return val
-end
-
-"""
-    expectation_value(mps::OpenMPS, mpo::MPO, site::Int)
+    expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
 
 Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
 """
-function expectation_value(mps::OpenMPS, mpo::MPO, site::Int = 1)
+function expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer = 1)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:right)
     dl = size(mps.Γ[site],1)
@@ -296,13 +287,13 @@ function expectation_value(mps::OpenMPS, mpo::MPO, site::Int = 1)
 end
 
 """
-    expectation_value_left(mps::OpenMPS, mpo::MPO, site::Int)
+    expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
 
 Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_value`](@ref)
 """
-function expectation_value_left(mps::OpenMPS, mpo::MPO, site::Int)
+function expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:left)
     dr = size(mps.Γ[site+oplength-1],3)
@@ -408,23 +399,22 @@ scalar_product(mps::OpenMPS{T}, mps2::OpenMPS{T}) where {T} = scalar_product(Ort
 scalar_product(mps::OrthOpenMPS{T}, mps2::OpenMPS{T}) where {T} = scalar_product(mps, OrthOpenMPS(mps2))
 scalar_product(mps::OpenMPS{T}, mps2::OrthOpenMPS{T}) where {T} = scalar_product(OrthOpenMPS(mps), mps2)
 
+# %% Transfer 
+transfer_matrix(mps::OpenMPS, mpo::MPOsite, site::Integer, direction=:left)	= transfer_matrix(mps[site], mpo, direction)
+
 """
     transfer_matrix(mps::OpenMPS, op, site, direction = :left)
 
 Return the transfer matrix at `site` with the operator sandwiched
 """
-function transfer_matrix(mps::OpenMPS, op::Array{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
+function transfer_matrix(mps::OpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
 	oplength = Int(length(size(op))/2)
 	N = length(mps.Γ)
     if (site+oplength-1) >N
         error("Operator goes outside the chain.")
     end
-    if mps.purification
-        op = auxillerate(op)
-    end
-    Γ = mps.Γ[site:(site+oplength-1)]
-	Λ = mps.Λ[site:site+oplength]
-    return transfer_matrix(Γ,Λ,op,direction)
+    sites = mps[site:(site+oplength-1)]
+    return transfer_matrix(sites,op,direction)
 end
 
 function saveOpenMPS(mps, filename)

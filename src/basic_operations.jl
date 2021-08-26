@@ -1,8 +1,3 @@
-struct TruncationArgs
-    Dmax::Int
-    tol::Float64
-	normalize::Bool
-end
 
 """
 	LRcanonical(M, dir)-> A,R,DB
@@ -53,11 +48,11 @@ end
 
 check whether given site/tensor in mps is left-/rightcanonical
 """
-function check_LRcanonical(a, dir)
+function check_LRcanonical(a::GenericSite, dir)
     if dir == :left
-        @tensor c[-1,-2] := a[1,2,-2]*conj(a[1,2,-1])
+        @tensor c[-1,-2] := a.Γ[1,2,-2]*conj(a.Γ[1,2,-1])
     elseif dir == :right
-        @tensor c[-1,-2] := a[-1,2,1]*conj(a[-2,2,1])
+        @tensor c[-1,-2] := a.Γ[-1,2,1]*conj(a.Γ[-2,2,1])
     else
         println("ERROR: choose :left for leftcanonical or :right for rightcanonical")
         return false
@@ -88,12 +83,12 @@ end
 
 Act with a two site gate and return the truncated decomposition U,S,Vt,err
 """
-function apply_two_site_gate(Γ, Λ, gate, args::TruncationArgs)
+function apply_two_site_gate(Γ, Λ, gate::GenericSquareGate, args::TruncationArgs)
 	ΓL = similar(Γ[1])
 	ΓR = similar(Γ[2])
 	absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
 	absorb_l!(ΓR,Γ[2], Λ[3])
-    @tensoropt (5,-1,-4) theta[:] := ΓL[-1,2,5]*ΓR[5,3,-4]*gate[-2,-3,2,3]
+    @tensoropt (5,-1,-4) theta[:] := ΓL[-1,2,5]*ΓR[5,3,-4]*gate.data[-2,-3,2,3]
 	DL,d,d,DR = size(theta)
 
 	U,S,Vt,Dm,err = split_truncate(theta, args)
@@ -145,7 +140,11 @@ function absorb_l!(gout,ll,g,lr)
 	gout .= reshape(ll,sg[1],1,1) .* g .*reshape(lr,1,1,sg[3])
 end
 
-function absorb_l(g,l,dir=:left)
+function absorb_l(ll::Vector{T},g,lr::Vector{T}) where {T}
+    sg=size(g)
+	return reshape(ll,sg[1],1,1) .* g .*reshape(lr,1,1,sg[3])
+end
+function absorb_l(g,l,dir::Symbol=:left)
     sg=size(g)
     if dir == :left
 		s = reshape(l,sg[1],1,1)
@@ -166,88 +165,28 @@ function deauxillerate_onesite(tens)
     return reshape(tens,s[1],d,d,s[3])
 end
 
-"""
-	auxillerate(gate)
+# """
+# 	block_to_gate
 
-Return gate_phys⨂Id_aux
-"""
-function auxillerate(op::Array{T_op,N_op}) where {T_op<:Number,N_op}
-	opSize = size(op)
-	d::Int = opSize[1]
-	opLength = Int(N_op/2)
-	idop = reshape(Matrix{T_op}(I,d^opLength,d^opLength),opSize...)
-	odds = -1:-2:(-4*opLength)
-	evens = -2:-2:(-4*opLength)
-	tens::Array{T_op,2*N_op} = ncon((op,idop),(odds,evens))
-	return reshape(tens,(opSize .^2)...)::typeof(op)
-end
+# Return the 4 legged version of the matrix
+# """
+# function block_to_gate(block)
+#     d = Int(sqrt(size(block,1)))
+#     return reshape(block,d,d,d,d)
+# end
 
-"""
-	auxillerate(mpo)
+# function matrix_to_gate(matrix, n)
+#     d = Int((size(matrix,1))^(1/n))
+#     return reshape(matrix, repeat([d],n)...)
+# end
+# function gate_to_matrix(gate, n)
+# 	dims = size(gate)
+# 	op_length = operator_length(gate)
+#     return reshape(gate, *(dims[1:op_length]...), *(dims[op_length+1:end]...))
+# end
 
-Return tensor⨂Id_aux
-"""
-function auxillerate(mpo::MPOsite{T}) where {T}
-	sop = size(mpo)
-	d::Int = sop[2]
-	idop = Matrix{T}(I,d,d)
-	@tensor tens[:] := idop[-3,-5]*mpo.data[-1,-2,-4,-6]
-	return MPOsite{T}(reshape(tens,sop[1],d^2,d^2,sop[4]))
-end
-
-"""
-    operator_length(operator)
-
-Returns the number of sites the operators acts on
-"""
-operator_length(op::Array{T_op,N_op}) where {T_op<:Number,N_op} = Int(N_op / 2)
-operator_length(mpo::MPO) = length(mpo)
-operator_length(mpo::MPOsite) = 1
-
-"""
-	block_to_gate
-
-Return the 4 legged version of the matrix
-"""
-function block_to_gate(block)
-    d = Int(sqrt(size(block,1)))
-    return reshape(block,d,d,d,d)
-end
-
-function matrix_to_gate(matrix, n)
-    d = Int((size(matrix,1))^(1/n))
-    return reshape(matrix, repeat([d],n)...)
-end
-function gate_to_matrix(gate, n)
-	dims = size(gate)
-	op_length = operator_length(gate)
-    return reshape(gate, *(dims[1:op_length]...), *(dims[op_length+1:end]...))
-end
-
-"""
-	gate_to_block
-
-Return the matrix version of the gate
-"""
-function gate_to_block(gate)
-    d = size(gate,1)
-    return reshape(gate,d^2,d^2)
-end
 
 # %% Expectation values
-function expectation_value_one_site(Λl,Γ,Λr,op)
-    theta = absorb_l(Γ,Λl,:left)
-    theta = absorb_l(theta,Λr,:right)
-    @tensoropt (1,3) r[:] := theta[1,2,3]*op[4,2]*conj(theta[1,4,3])
-    return r[1]
-end
-
-function expectation_value_one_site(Γ,op)
-	#Assumes canonical
-    @tensor r[:] := theta[2,1,3]*op[4,1]*conj(theta[2,4,3])
-    return r[1]
-end
-
 function expectation_value_two_site(Γ,Λ,op)
     thetaL = absorb_l(Γ[1],Λ[1],:left)
     thetaL = absorb_l(thetaL,Λ[2],:right)
@@ -295,8 +234,6 @@ function local_ham_eigs(ham_gate::AbstractArray{T}, N; nev=2) where {T}
 	return eigsolve(map,d^N,nev,:SR,ishermitian=true) #eigs(map, nev=nev, which=:SR)
 end
 
-using SparseArrays #TODO This function works for an open chain, not for a circle. 
-using SparseArrayKit
 function local_ham_eigs_sparse(ham_mat::AbstractArray{T}, d, N; nev=2) where {T}
 	Nh = Int(log(d,size(ham_mat,1)))
 	id = sparse(1.0I,d^(N-Nh),d^(N-Nh))

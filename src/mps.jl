@@ -1,11 +1,12 @@
-abstract type AbstractMPS{T <: Number} end
+
 Base.length(mps::AbstractMPS) = length(mps.Γ)
+Base.getindex(mps::AbstractMPS, I) = [mps[i] for i in I]
 
-
-function prepare_layers(mps::AbstractMPS, hamiltonian_gates, dt, trotter_order)
-	gates = (mps.purification ? auxillerate.(hamiltonian_gates) : hamiltonian_gates)
+function prepare_layers(mps::AbstractMPS, gs::Vector{<:AbstractSquareGate}, dt, trotter_order)
+	gates = (mps.purification ? auxillerate.(gs) : gs)
 	return prepare_layers(gates,dt,trotter_order)
 end
+
 
 """
 	get_thermal_states(mps, hamGates, betas, dbeta, order=2)
@@ -35,7 +36,7 @@ function get_thermal_states(mps::AbstractMPS, hamGates, βs, dβ; order=2)
 		end
 		println(": State ", n ,"/",Nβ, " done.")
 		push!(βout,β)
-		mpss[n] = deepcopy(mps)
+		mpss[n] = copy(mps)
 	end
 	return mpss, βout
 end

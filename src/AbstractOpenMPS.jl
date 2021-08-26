@@ -1,46 +1,10 @@
-abstract type AbstractOpenMPS{T<:Complex} <: AbstractMPS{T} end
-
-mutable struct OpenMPS{T<:Complex} <: AbstractOpenMPS{T}
-    #In gamma-lambda notation
-    Γ::Array{Array{T,3},1}
-    Λ::Array{Array{T,1},1}
-
-    #Indicates whether the MPS should be treated as a purification or not
-    purification::Bool
-
-    # Max bond dimension and tolerance
-    truncation::TruncationArgs
-    #Dmax::Integer
-    #tol::Float64
-
-    #Accumulated error
-    error::Float64
-end
-
-mutable struct OrthOpenMPS{T<:Complex} <: AbstractOpenMPS{T}
-    Γ::Array{Array{T,3},1}
-
-    #Indicates whether the MPS should be treated as a purification or not
-    purification::Bool
-
-    # Max bond dimension and tolerance
-    truncation::TruncationArgs
-
-    #Accumulated error
-    error::Float64
-
-    #Orthogonality boundaries
-    lb::Int
-    rb::Int 
-end
-
 """
     canonicalize(mps::AbstractOpenMPS, n)
 
 Return the mps acted on with `n` layers of the identity
 """
 function canonicalize(mps::AbstractOpenMPS,n)
-    mps2 = deepcopy(mps)
+    mps2 = copy(mps)
     for i in 1:n
         apply_identity_layer!(mps2)
     end
@@ -58,11 +22,11 @@ function canonicalize!(mps::AbstractOpenMPS,n)
 end
 
 """
-    expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Int)
+    expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer)
 
 Return the expectation value of the local `mpo` at `site`
 """
-expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Int) = expectation_value(mps,MPO(mpo),site)
+expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer) = expectation_value(mps,MPO(mpo),site)
 
 """
     expectation_values(mps::AbstractOpenMPS, op)
@@ -81,7 +45,6 @@ function expectation_values(mps::AbstractOpenMPS, op)
     return vals
 end
 
-
 """
     correlator(mps,op1,op2)
 
@@ -89,7 +52,7 @@ Return the two-site expectation values
 
 See also: [`connected_correlator`](@ref)
 """
-function correlator(mps::AbstractOpenMPS{T}, op1, op2, k1::Integer, k2::Integer) where {T}
+function correlator(mps::AbstractOpenMPS, op1, op2, k1::Integer, k2::Integer)
     N = length(mps.Γ)
 	oplength1 = operator_length(op1)
 	oplength2 = operator_length(op2)
@@ -124,18 +87,18 @@ function correlator(mps::AbstractOpenMPS{T}, op1, op2, k1::Integer, k2::Integer)
     end
 	return corr[k1:k2,k1:k2]
 end
-function correlator(mps::AbstractOpenMPS{T},op1,op2) where {T}
+function correlator(mps::AbstractOpenMPS,op1,op2) 
     N = length(mps.Γ)
     oplength1 = operator_length(op1)
 	oplength2 = operator_length(op2)
-    correlator(mps::OpenMPS{T},op1,op2,1,N+1-max(oplength1,oplength2))
+    correlator(mps::OpenMPS,op1,op2,1,N+1-max(oplength1,oplength2))
 end
-function correlator(mps::AbstractOpenMPS{T},op) where {T}
+function correlator(mps::AbstractOpenMPS,op)
     N = length(mps.Γ)
     oplength = operator_length(op)
-    correlator(mps::OpenMPS{T},op,1,N+1-oplength)
+    correlator(mps::OpenMPS,op,1,N+1-oplength)
 end
-function correlator(mps::AbstractOpenMPS{T}, op, k1::Integer, k2::Integer) where {T}
+function correlator(mps::AbstractOpenMPS, op, k1::Integer, k2::Integer)
     N = length(mps.Γ)
 	oplength = operator_length(op)
 	emptytransfers = transfer_matrices(mps,:left)
@@ -203,9 +166,3 @@ function connected_correlator(mps::AbstractOpenMPS, op, k1::Integer, k2::Integer
     end
     return concorr
 end
-
-# function prepare_layers(mps::AbstractOpenMPS, hamiltonian_gates, dt, trotter_order)
-#     gates =
-#         (mps.purification ? auxillerate.(hamiltonian_gates) : hamiltonian_gates)
-#     return prepare_layers(gates, dt, trotter_order)
-# end

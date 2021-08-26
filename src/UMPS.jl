@@ -3,31 +3,27 @@ const DEFAULT_UMPS_TOL = 1e-12
 const DEFAULT_UMPS_NORMALIZATION = true
 const DEFAULT_UMPS_TRUNCATION = TruncationArgs(DEFAULT_UMPS_DMAX, DEFAULT_UMPS_TOL, DEFAULT_UMPS_NORMALIZATION)
 
-import Base:convert
-
-mutable struct UMPS{T <: Number} <: AbstractMPS{T}
-    #In gamma-lambda notation
-    Γ::Array{Array{T,3},1}
-    Λ::Array{Array{T,1},1}
-
-    #Indicates whether the MPS should be treated as a purification or not
-    purification::Bool
-
-	# Max bond dimension and tolerance
-	truncation::TruncationArgs
-	#Dmax::Integer
-	#tol::Float64
-
-	# Accumulated error
-	error::Float64
-
-    #Constructors
-	function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{T,1},1}; truncation::TruncationArgs = DEFAULT_UMPS_TRUNCATION, purification=false, error = 0.0) where {T}
-		new{T}(Γ, Λ, purification,truncation, error)
-	end
-
+Base.firstindex(mps::UMPS) = 1
+Base.lastindex(mps::UMPS) = length(mps.Γ)
+Base.IndexStyle(::Type{<:UMPS}) = IndexLinear()
+function Base.getindex(mps::UMPS, i::Integer) 
+	i1 = mod1(i, length(mps))
+	i2 = mod1(i+1, length(mps))
+	return LinkSite(mps.Γ[i1], mps.Λ[i1], mps.Λ[i2], mps.purification)
 end
 
+function Base.setindex!(mps::UMPS{T}, v::LinkSite{K}, i::Integer) where {T,K}
+	i1 = mod1(i, length(mps))
+	i2 = mod1(i+1, length(mps))
+	mps.Γ[i1] = convert.(T, v.Γ)
+	mps.Λ[i1] = convert.(T, v.Λ1)
+	mps.Λ[i2] = convert.(T, v.Λ2)
+end
+
+# %% Constructors
+function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{T,1},1}; truncation::TruncationArgs = DEFAULT_UMPS_TRUNCATION, purification=false, error = 0.0) where {T}
+	UMPS{T}(Γ, Λ, purification,truncation, error)
+end
 
 function UMPS(Γ::Array{Array{T,3},1}, Λ::Array{Array{T,1},1}, mps::UMPS; error=0) where{T}
 	return UMPS(Γ, Λ, purification = mps.purification, truncation= mps.truncation, error = mps.error + error)
@@ -96,6 +92,14 @@ function identityMPS(mps::UMPS{T}) where {T}
 	return identityUMPS(T, N, d, truncation=trunc)
 end
 
+function productUMPS(theta, phi)
+    Γ = [reshape([cos(theta), exp(phi*im)*sin(theta)],(1,2,1))]
+    Λ = [[ComplexF64(1.0)]]
+    return UMPS(Γ,Λ, purification = false)
+end
+
+Base.copy(mps::UMPS{T}) where {T} = UMPS{T}([copy(getfield(mps, k)) for k = 1:length(fieldnames(UMPS))]...) 
+
 """
 	reverse(mps::UMPS)
 
@@ -117,9 +121,8 @@ function rotate(mps::UMPS,n::Integer)
 end
 
 # %% Transfer
-function transfer_matrix(mps::UMPS, op, site, direction = :left)
-	oplength::Int = Int(length(size(op))/2)
-	#oplength = Int(N_op/2)
+function transfer_matrix(mps::UMPS, op::Array{T_op,N_op}, site::Integer, direction = :left) where {T_op<:Number,N_op}
+	oplength = operator_length(op)
 	N = length(mps.Γ)
 	if mps.purification
 		op = auxillerate(op)
@@ -127,6 +130,20 @@ function transfer_matrix(mps::UMPS, op, site, direction = :left)
     Γ::typeof(mps.Γ) = mps.Γ[mod1.(site:(site+oplength-1),N)]
 	Λ::typeof(mps.Λ) = mps.Λ[mod1.(site:site+oplength,N)]
     return transfer_matrix(Γ,Λ,op,direction)
+end
+function transfer_matrix(mps::UMPS, mpo::MPOsite, site::Integer, direction=:left)
+	if mps.purification
+		mpo = auxillerate(mpo)
+	end
+	N = length(mps)
+	if direction == :left
+		T = transfer_left(mps.Γ[mod1(site,N)],mps.Λ[mod1(site+1,N)], mpo)
+	elseif direction == :right
+		T = transfer_right(mps.Γ[mod1(site,N)], mps.Λ[mod1(site,N)], mpo)
+	else
+		error("Choose direction :left or :right")
+	end
+	return T
 end
 
 function transfer_matrix(mps::UMPS,site::Integer,direction=:left)
@@ -166,13 +183,13 @@ function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
     T = transfer_matrix(mps,direction)
 	D = Int(sqrt(size(T,2)))
 	nev = minimum([D^2, nev])
-    if size(T,1)<10
+    if D<4
         vals, vecs = eigen(Matrix(T))
-        vals = vals[:,end:-1:end-nev+1]
-        vecs = vecs[:,end:-1:end-nev+1]
+        vals = vals[end:-1:1]
+        vecs = vecs[:,end:-1:1]
     else
 		x0 = vec(Matrix{K}(I,D,D))
-        vals, vecsvec = eigsolve(T,x0,nev)#eigs(T,nev=nev)
+        vals, vecsvec = eigsolve(T,x0,nev, :LM)#eigs(T,nev=nev)
 		vecs = hcat(vecsvec...)
     end
 	# if K == ComplexDF64
@@ -183,6 +200,32 @@ function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
 	# for i in 1:nev
 	# 	tensors[i] = reshape(vecs[:,i],D,D)
 	# end
+	nev = min(length(vals),nev)
+    return vals[1:nev], vecs[:,1:nev] #canonicalize_eigenoperator.(tensors)
+end
+
+"""
+	transfer_spectrum(mps::UMPS, mpo::AbstractMPO, direction=:left; nev=1)
+
+Return the spectrum of the transfer matrix of the UMPS, with mpo sandwiched
+"""
+function transfer_spectrum(mps::UMPS{K}, mpo::AbstractMPO, direction=:left; nev=1) where {K}
+    T = transfer_matrix(mps,mpo,direction=direction)
+	N = size(T,1)
+	D = Int(sqrt(N/size(mpo[1],1)))
+	nev = minimum([N, nev])
+    if N<10
+        vals, vecs = eigen(Matrix(T))
+        vals = vals[end:-1:end-nev+1]
+        vecs = vecs[:,end:-1:end-nev+1]
+    else
+		x0id = Matrix{K}(I,D,D)
+		x0v = rand(K,size(mpo[1],1))
+		@tensor x0tens[:] := x0id[-1,-3]*x0v[-2]
+		x0 = vec(x0tens)
+        vals, vecsvec = eigsolve(T,x0,nev)#eigs(T,nev=nev)
+		vecs = hcat(vecsvec...)
+    end
     return vals, vecs[:,1:nev] #canonicalize_eigenoperator.(tensors)
 end
 
@@ -191,7 +234,7 @@ function LinearAlgebra.norm(mps::UMPS)
 end
 
 # %% Canonicalize
-function check_canonical(mps::UMPS)
+function check_canonical(mps::UMPS) #TODO
 
 end
 
@@ -273,6 +316,76 @@ function canonicalize(mps::UMPS,n)
 end
 
 """
+	boundary(mps::UMPS)
+
+Return the left and right dominant eigentensors of the transfer matrix
+"""
+function boundary(mps::UMPS)
+	valR, rhoRs = transfer_spectrum(mps,:left,nev=2)
+	valL, rhoLs = transfer_spectrum(mps,:right,nev=2)
+	DR = Int(sqrt(length(rhoRs[:,1])))
+	DL = Int(sqrt(length(rhoLs[:,1])))
+	rhoR =  reshape(rhoRs[:,1],DR,DR)
+	rhoL =  reshape(rhoLs[:,1],DL,DL)
+	return rhoL, rhoR
+end
+
+""" #FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
+	boundary(mps::UMPS, mpo::MPO) 
+
+Return the left and right dominant eigentensors of the transfer matrix
+"""
+function boundary(mps::UMPS, mpo::AbstractMPO)
+	valR, rhoRs = transfer_spectrum(mps,mpo,:left,nev=2)
+	valL, rhoLs = transfer_spectrum(mps,mpo,:right,nev=2)
+	DmpoR = size(mpo[end],4)
+	DmpoL = size(mpo[1],1)
+	DR = Int(sqrt(length(rhoRs[:,1])/DmpoR))
+	DL = Int(sqrt(length(rhoLs[:,1])/DmpoL))
+	rhoR =  reshape(rhoRs[:,1],DR,DmpoR,DR)
+	rhoL =  reshape(rhoLs[:,1],DL,DmpoL,DL)
+	return rhoL, rhoR
+end
+
+#TODO Calculate expectation values and effective hamiltonian as in https://arxiv.org/pdf/1207.0652.pdf
+""" #FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
+	effective_hamiltonian(mps::UMPS, mpo::MPO) 
+
+Return the left and right effective_hamiltonian
+"""
+function effective_hamiltonian(mps::UMPS{T}, mpo::AbstractMPO; direction=:left) where {T}
+	Dmpo = size(mpo[end],1)
+	D = length(mps.Λ[1])
+	sR = (D,Dmpo,D)
+	TL = transfer_matrix(mps,mpo,direction=direction)
+	TIL = transfer_matrix(mps,direction)
+	@warn "Make sure that mpo is lower triangular with identity on the first and last place of the diagonal"
+	rhoR = zeros(T,sR) #TODO Sparse array?
+	itr = 1:Dmpo
+	if direction ==:right 
+		itr = reverse(itr)
+	end
+	rhoR[:,itr[end],:] = Matrix{T}(I,D,D)
+	for k in Dmpo-1:-1:1
+		rhoR[:,itr[k],:] = reshape(TL * vec(rhoR),sR)[:,itr[k],:]
+	end
+	C = rhoR[:,itr[1],:]
+	rho = diagm(mps.Λ[1].^2)
+	@tensor e0[:] := C[1,2]*rho[1,2]
+	idvec = vec(Matrix{T}(I,D,D))
+	function TI(v)
+		v = TIL*v
+		return (v - idvec *(vec(rho)'*v))
+	end
+	linmap = LinearMap{ComplexF64}(TI,D^2)
+	hl, info = linsolve(linmap,vec(C)-e0[1]*idvec,1,-1)
+	rhoR[:,itr[1],:] = hl
+	return e0[1], rhoR ,info
+end
+
+
+
+"""
 	canonicalize_cell(mps::UMPS)
 
 Make the unit cell canonical and return the resulting UMPS
@@ -280,8 +393,8 @@ Make the unit cell canonical and return the resulting UMPS
 function canonicalize_cell(mps::UMPS)
 	D = length(mps.Λ[1])
 	N = length(mps.Γ)
-	Γcopy = deepcopy(mps.Γ)
-	Λcopy = deepcopy(mps.Λ)
+	Γcopy = copy(mps.Γ)
+	Λcopy = copy(mps.Λ)
 
 	valR, rhoRs = transfer_spectrum(mps,:left,nev=2)
 	valL, rhoLs = transfer_spectrum(mps,:right,nev=2)
@@ -376,8 +489,8 @@ function apply_identity_layer(mps::UMPS, shift)
 	end
 	Γ = mps.Γ
 	Λ = mps.Λ
-	Γout = similar(Γ)
-	Λout = deepcopy(Λ)
+	Γout = copy(Γ)
+	Λout = copy(Λ)
 	itr = shift .+ (1:2:N-1)
 	#itr = isodd(n) ? (1:2:N-1) : (s:-2:1)
 	total_error = 0.0
@@ -455,14 +568,14 @@ end
 
 
 #%% Expectation values
-function expectation_value(mps::UMPS, op, site::Int)
+function expectation_value(mps::UMPS, op::Array{T_op,N_op}, site::Integer) where {T_op<:Number,N_op}
 	opLength=operator_length(op)
 	N = length(mps.Γ)
 	if mps.purification
 		op = auxillerate(op)
 	end
 	if opLength == 1
-		val = expectation_value_one_site(mps.Λ[site],mps.Γ[site],mps.Λ[mod1(site+1,n)],op)
+		val = expectation_value_one_site(mps.Λ[site],mps.Γ[site],mps.Λ[mod1(site+1,N)],op)
 	elseif opLength == 2
 		val = expectation_value_two_site(mps.Γ[mod1.(site:site+1,N)],mps.Λ[mod1.(site:site+2,N)],op)
 	else
@@ -471,7 +584,9 @@ function expectation_value(mps::UMPS, op, site::Int)
 	return val
 end
 
-function expectation_values_two_site(mps::UMPS,op)
+expectation_value(mps::UMPS, op::MPOsite, site::Integer) = expectation_value(mps[site],op)
+
+function expectation_values_two_site(mps::UMPS, op)
 	valRs, vecRs = transfer_spectrum(mps,:left,nev=4)
 	valLs, vecLs = transfer_spectrum(mps,:right,nev=4)
 	DR = length(mps.Λ[1])

@@ -23,15 +23,16 @@ end
 Return the Ising hamiltonian as a list of 2-site gates
 """
 function isingHamGates(L,J,h,g)
-    gates = Array{Array{ComplexF64,4},1}(undef,L-1)
+    gates = Vector{HermitianGate{ComplexF64,4}}(undef,L-1)
     for i=1:L-1
         if i==1
-            gates[i] = reshape(-(J*ZZ + h/2*(2XI+IX) + g/2*(2*ZI+IZ)),2,2,2,2)
+            gate = reshape(-(J*ZZ + h/2*(2XI+IX) + g/2*(2*ZI+IZ)),2,2,2,2)
         elseif i==L-1
-            gates[i] = reshape(-(J*ZZ + h/2*(XI+2IX) + g/2*(ZI+2*IZ)),2,2,2,2)
+            gate = reshape(-(J*ZZ + h/2*(XI+2IX) + g/2*(ZI+2*IZ)),2,2,2,2)
         else
-            gates[i] = reshape(-(J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)),2,2,2,2)
+            gate = reshape(-(J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)),2,2,2,2)
         end
+        gates[i] = HermitianGate(gate)
     end
     return gates
 end
@@ -49,7 +50,7 @@ function IdentityMPO(L, d)
         mpo[i] = Array{Complex128}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
-    return MPO(mpo)
+    return HermitianMPO(mpo)
 end
 
 """
@@ -82,7 +83,7 @@ IsingMPO(lattice sites, J, transverse, longitudinal[, shift=0])
 Returns the Ising hamiltonian as an MPO
 """
 function IsingMPO(L, J, h, g, shift=0)
-    mpo = Array{Array{ComplexF64,4}}(undef,L)
+    mpo = Vector{Array{ComplexF64,4}}(undef,L)
     mpo[1] = zeros(ComplexF64,1,2,2,3)
     mpo[1][1,:,:,:] = reshape([si -J*sz -h*sx-g*sz+shift*si/L],2,2,3)
     mpo[L] = zeros(ComplexF64,3,2,2,1)
@@ -97,7 +98,7 @@ function IsingMPO(L, J, h, g, shift=0)
         help[2,:,:,3] = sz
         mpo[i] = help
     end
-    return MPO(mpo)
+    return HermitianMPO(mpo)
 end
 
 """
@@ -106,7 +107,7 @@ end
 Returns the Heisenberg gamiltonian as an MPO
 """
 function HeisenbergMPO(L, Jx, Jy, Jz, h)
-    mpo = Array{Any}(L)
+    mpo = Vector{Array{ComplexF64,4}}(L)
     mpo[1] = Array{Complex128}(1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
     mpo[L] = Array{Complex128}(5,2,2,1)
@@ -130,7 +131,7 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
         help[5,:,:,1] = help[5,:,:,2] = help[5,:,:,3] = help[5,:,:,4] = s0
         mpo[i] = help
     end
-    return MPO(mpo)
+    return HermitianMPO(mpo)
 end
 
 """

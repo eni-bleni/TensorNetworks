@@ -67,8 +67,8 @@ function apply_layer_distributed(Γin, Λin, gates, parity, truncation)
 		apply_two_site_gate(Γin[k:k+1], Λin[k:k+2], gates[k], truncation)
 	end
 	ΓlΓe = pmap(k->apply_gate(k),itr)
-	Γout = similar(Γin)
-	Λout = deepcopy(Λin)
+	Γout = copy(Γin)
+	Λout = copy(Λin)
 	total_error = 0.0
 	if iseven(parity)
 		Γout[1] = Γin[1]
@@ -97,18 +97,18 @@ function apply_layer(Γin, Λin, gates, parity, truncation)
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
 	total_error = 0.0
-	Γout = similar(Γin)
-	Λout = deepcopy(Λin)
+	Γout = copy(Γin)
+	Λout = copy(Λin)
 	total_error = Threads.Atomic{Float64}(0.0)
 	Threads.@threads for k in itr
 		Γout[k], Λout[k+1], Γout[k+1], err = apply_two_site_gate(Γin[k:k+1], Λin[k:k+2], gates[k], truncation)
-		Threads.atomic_add!(total_error,err::Float64)
+		Threads.atomic_add!(total_error, real(err))
 	end
 	if iseven(parity)
 		Γout[1] = Γin[1]
 		Γout[end] = Γin[end]
 	end
-	return Γout, Λout, total_error::Float64
+	return Γout, Λout, total_error[]
 end
 
 """
@@ -123,7 +123,7 @@ function apply_identity_layer(Γin, Λin, parity, truncation)
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
 	Γout = similar(Γin)
-	Λout = deepcopy(Λin)
+	Λout = copy(Λin)
 	total_error = Threads.Atomic{Float64}(0.0)
 	Threads.@threads for k in itr
 		Γout[k], Λout[k+1], Γout[k+1], err = apply_two_site_identity(Γin[k:k+1], Λin[k:k+2], truncation)
@@ -133,7 +133,7 @@ function apply_identity_layer(Γin, Λin, parity, truncation)
 		Γout[1] = Γin[1]
 		Γout[end] = Γin[end]
 	end
-	return Γout, Λout, total_error
+	return Γout, Λout, total_error[]
 end
 
 """
@@ -152,8 +152,8 @@ function apply_identity_layer_distributed(Γin, Λin, parity, truncation)
 		apply_two_site_identity(Γin[k:k+1], Λin[k:k+2], truncation)
 	end
 	ΓlΓe = pmap(k->apply_gate(k),itr)
-	Γout = similar(Γin)
-	Λout = deepcopy(Λin)
+	Γout = copy(Γin)
+	Λout = copy(Λin)
 	total_error = 0.0
 	if iseven(parity)
 		Γout[1] = Γin[1]
@@ -218,13 +218,12 @@ end
 
 Return the layers of a 4:th order Trotter scheme
 """
-function frgates(dt,gates)
+
+function frgates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
    theta = 1/(2-2^(1/3))
-   W = Array{Array{Array{Complex{Float64},4},1},1}(undef,7)
-   d =size(gates[1],1)
-   blocks = gate_to_block.(gates)
+   W = Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,7)
    times = [theta/2 theta (1-theta)/2 (1-2*theta)]
-   exponentiate(t) = block_to_gate.(map(x->exp(-t*1im*dt*x),blocks))
+   exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
    W[1:4] = exponentiate.(times)
    # W[1] = map(x->exp(-theta*1im/2*dt*x),blocks)
    # W[2] = map(x->exp(-theta*1im*dt*x),blocks)
@@ -235,33 +234,57 @@ function frgates(dt,gates)
    W[7] = W[1]
    return W
 end
+function frgates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
+	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,7)
+	times = [theta/2 theta (1-theta)/2 (1-2*theta)]
+	exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
+	W[1:4] = exponentiate.(times)
+	W[5] = W[3]
+	W[6] = W[2]
+	W[7] = W[1]
+	return W
+ end
+ frgates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = frgates(dt, [g.data for g in gates])
 
 """
 	st2gates(dt,gates)
 
 Return the layers of a 2:nd order Trotter scheme
 """
-function st2gates(dt,gates)
-   W = Array{Array{Array{Complex{Float64},4},1},1}(undef,3)
-   d =size(gates[1],1)
-   blocks = gate_to_block.(gates)
+function st2gates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
+   W =  Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,3)
    times = [1/2 1]
-   exponentiate(t) = block_to_gate.(map(x->exp(-t*1im*dt*x),blocks))
+   exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
    W[1:2] = exponentiate.(times)
    W[3] = W[1]
    return W
 end
+function st2gates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
+	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,3)
+	times = [1/2 1]
+   	exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
+   	W[1:2] = exponentiate.(times)
+   	W[3] = W[1]
+	return W
+ end
+ st2gates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = st2gates(dt, [g.data for g in gates])
 
 """
 	st1gates(dt,gates)
 
 Return the layers of a 1:st order Trotter scheme
 """
-function st1gates(dt,gates)
-   W = Array{Array{Array{Complex{Float64},4},1},1}(undef,2)
+function st1gates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
+   W = Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,2)
    d = size(gates[1],1)
-   blocks = gate_to_block.(gates)
-   W[1] = map(x->reshape(exp(-1im*dt*x),d,d,d,d),blocks)
+   W[1] = map(x->exp(-1im*dt*x),gates)
    W[2] = W[1]
    return W
 end
+function st1gates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
+	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,2)
+	W[1] = map(x->exp(-1im*dt*x),gates)
+	W[2] = W[1]
+	return W
+ end
+st1gates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = st1gates(dt, [g.data for g in gates])

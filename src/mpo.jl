@@ -1,3 +1,5 @@
+#TODO compress MPO https://arxiv.org/pdf/1611.02498.pdf
+
 struct MPOsite{T<:Number} <: AbstractArray{T,4}
     data::Array{T,4}
 end
@@ -5,21 +7,61 @@ function MPOsite(op::Array{T,2}) where {T}
     sop = size(op)
     return MPOsite(reshape(op,1,sop[1],sop[2],1))
 end
-struct MPO{T<:Number} <: AbstractArray{MPOsite{T}, 1}
-    data::Array{MPOsite{T},1}
+
+abstract type AbstractMPO{T<:Number} <: AbstractArray{MPOsite{T}, 1} end
+
+struct MPO{T<:Number} <: AbstractMPO{T}
+    data::Vector{MPOsite{T}}
 end
+
+struct HermitianMPO{T<:Number} <: AbstractMPO{T}
+    data::MPO{T}
+    function HermitianMPO(mpo::MPO{T}) where {T}
+        mpo = MPO([(m+ conj(permutedims(m,[1,3,2,4])))/2 for m in mpo.data])
+        new{T}(mpo)
+    end
+    function HermitianMPO(sites::Vector{MPOsite{T}}) where {T}
+        mpo = MPO([(site + conj(permutedims(site,[1,3,2,4])))/2 for site in sites])
+        new{T}(mpo)
+    end
+end
+
 MPO(mpo::MPOsite) = MPO([mpo])
 MPO(op::Array{T,2}) where {T} = MPO(MPOsite(op))
 MPO(ops::Array{T,1}) where {T} = MPO(map(op->MPOsite(op),ops))
-Base.size(mposite::MPOsite) = size(mposite.data)
-Base.size(mpo::MPO) = size(mpo.data)
-Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
-Base.IndexStyle(::Type{<:MPO}) = IndexLinear()
-Base.getindex(mpo::MPOsite, i::Int) = mpo.data[i]
-Base.getindex(mpo::MPO, i::Int) = mpo.data[i]
-Base.setindex!(mpo::MPOsite, v, I::Vararg{Int,4}) = (mpo.data[I] = v)
-Base.setindex!(mpo::MPO, v, I::Vararg{Int,N}) where {N} = (mpo.data[I] = v)
 
+
+HermitianMPO(mpo::MPOsite) = HermitianMPO(MPO([mpo]))
+HermitianMPO(op::Array{T,2}) where {T<:Number} = HermitianMPO(MPOsite(op))
+HermitianMPO(ops::Array{Array{T,4},1}) where {T<:Number} = HermitianMPO(map(op->MPOsite(op),ops))
+
+Base.size(mposite::MPOsite) = size(mposite.data)
+Base.size(mpo::AbstractMPO) = size(mpo.data)
+Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
+Base.IndexStyle(::Type{<:AbstractMPO}) = IndexLinear()
+Base.getindex(mpo::MPOsite, i::Integer) = mpo.data[i]
+Base.getindex(mpo::AbstractMPO, i::Integer) = mpo.data[i]
+Base.setindex!(mpo::MPOsite, v, I::Vararg{Integer,4}) = (mpo.data[I] = v)
+Base.setindex!(mpo::AbstractMPO, v, I::Vararg{Integer,N}) where {N} = (mpo.data[I] = v)
+
+operator_length(mpo::AbstractMPO) = length(mpo)
+operator_length(mpo::MPOsite) = 1
+
+"""
+	auxillerate(mpo)
+
+Return tensor⨂Id_aux
+"""
+function auxillerate(mpo::MPOsite{T}) where {T}
+	sop = size(mpo)
+	d = sop[2]
+	idop = Matrix{T}(I,d,d)
+	@tensor tens[:] := idop[-3,-5]*mpo.data[-1,-2,-4,-6]
+	return MPOsite{T}(reshape(tens,sop[1],d^2,d^2,sop[4]))
+end
+
+auxillerate(mpo::MPO) = MPO(auxillerate.(mpo.data))
+auxillerate(mpo::HermitianMPO) = HermitianMPO(auxillerate.(mpo.data))
 
 # %% Todo
 """

@@ -1,9 +1,9 @@
 Base.size(mps::OrthOpenMPS) = size(mps.Γ)
 Base.IndexStyle(::Type{<:OrthOpenMPS}) = IndexLinear()
-Base.getindex(mps::OrthOpenMPS, i::Int) = mps.Γ[i]
-Base.setindex!(mps::OrthOpenMPS, v, i::Int) = (mps.Γ[i] = v)
-firstindex(mps::OrthOpenMPS) = 1
-lastindex(mps::OrthOpenMPS) = length(mps.Γ)
+Base.getindex(mps::OrthOpenMPS, i::Integer) = GenericSite(mps.Γ[i], mps.purification)
+Base.setindex!(mps::OrthOpenMPS{T}, v, i::Integer) where {T} = (mps.Γ[i] = convert.(T, v))
+Base.firstindex(mps::OrthOpenMPS) = 1
+Base.lastindex(mps::OrthOpenMPS) = length(mps.Γ)
 
 #%% Constructors 
 function OrthOpenMPS(
@@ -28,7 +28,7 @@ end
 function OrthOpenMPS(
     Γ::Array{Array{T,3},1},
     mps::AbstractOpenMPS,
-    lb,rb;
+    (lb,rb);
     error = 0.0,
 ) where {T}
     M = canonicalizeM(Γ)
@@ -37,7 +37,7 @@ end
 
 function OrthOpenMPS(
     mps::OpenMPS{T},
-    lb=1::Int, rb=1::Int;
+    (lb, rb)::Tuple{Int64, Int64} = (1,1),
     error = 0.0,
 ) where {T}
     if lb>rb
@@ -48,14 +48,15 @@ function OrthOpenMPS(
 end
 OrthOpenMPS(mps::OrthOpenMPS) = mps
 
-function OrthOpenMPS(
-    mps::OpenMPS{T};
-    center = 1,
-    error = 0.0,
-) where {T}
-    OrthOpenMPS{T}(mps, center, center, error = error)
-end
+# function OrthOpenMPS(
+#     mps::OpenMPS{T};
+#     center::Integer = 1,
+#     error = 0.0,
+# ) where {T}
+#     OrthOpenMPS{T}(mps, (center, center), error = error)
+# end
 
+Base.copy(mps::OrthOpenMPS{T}) where {T} = OrthOpenMPS([copy(getfield(mps, k)) for k = 1:length(fieldnames(OrthOpenMPS))]...) 
 
 
 """
@@ -160,43 +161,39 @@ function canonicalize!(mps::OrthOpenMPS, lb=0, rb=0; force=false)
 end
 
 """
-    canonicalize!(mps::OrthOpenMPS, center::Int=0)
+    canonicalize!(mps::OrthOpenMPS, center::Integer=0)
 
 Make mps left canonical up to site `center` and right canonical afterwards.
 """
-centralize(mps::OrthOpenMPS, center::Int = 0) = canonicalize!(mps, center, center)
+centralize(mps::OrthOpenMPS, center::Integer = 0) = canonicalize!(mps, center, center)
+
+
+#%% Transfer  
+transfer_matrix(mps::OrthOpenMPS, mpo::MPOsite, site::Integer, direction=:left) = transfer_matrix(mps[site], mpo, direction)
+transfer_matrix(mps::OrthOpenMPS, site::Integer, direction=:left) = transfer_matrix(mps[site], direction)
 
 
 #%% Expectation values
 """ #FIXME
-    expectation_value(mps::OrthOpenMPS, op::Array{T_op,N_op}, site::Int)
+    expectation_value(mps::OrthOpenMPS, op::Array{T_op,N_op}, site::Integer)
 
 Return the expectation value of the gate starting at the `site`
 """
-function expectation_value(mps::OrthOpenMPS, op::Array{T_op,N_op}, site::Int) where {T_op <: Number, N_op}
+function expectation_value(mps::OrthOpenMPS, op::AbstractGate{T_op,N_op}, site::Integer) where {T_op, N_op}
     opLength = operator_length(op)
-    if mps.purification
-        op = auxillerate(op)
-    end
     canonicalize!(mps,site)
-    if opLength == 1
-        val = expectation_value_one_site(mps.Γ[site], op)
-    elseif opLength == 2
-        val = expectation_value_two_site(mps.Γ[site:site+1], op)
-    else
-        error("Expectation value not implemented for operators of this size")
-    end
-    return val
+    sites = mps[site:(site+opLength-1)]
+    expectation_value(sites, op)
 end
 
 """
-    expectation_value(mps::OrthOpenMPS, mpo::MPO, site::Int)
+    expectation_value(mps::OrthOpenMPS, mpo::AbstractMPO, site::Integer)
 
 Return the expectation value of the mpo starting at `site`
 
 See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
 """
-function expectation_value(mps::OrthOpenMPS, mpo::MPO, site::Int = 1)
+function expectation_value(mps::OrthOpenMPS, mpo::AbstractMPO, site::Integer = 1)
     oplength = operator_length(mpo)
     T = transfer_matrix(mps,mpo,site,:right)
     dl = size(mps.Γ[site],1)
@@ -243,14 +240,11 @@ end
 
 Return the transfer matrix at `site` with the operator sandwiched
 """
-function transfer_matrix(mps::OrthOpenMPS, op::Array{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
+function transfer_matrix(mps::OrthOpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
 	oplength = Int(length(size(op))/2)
 	N = length(mps.Γ)
     if (site+oplength-1) >N
         error("Operator goes outside the chain.")
-    end
-    if mps.purification
-        op = auxillerate(op)
     end
     Γ = mps.Γ[site:(site+oplength-1)]
     return transfer_matrix(Γ,op,direction)
