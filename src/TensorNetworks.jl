@@ -43,6 +43,6 @@ include("coarsegraining.jl")
 include("tebd.jl")
 include("transfer.jl")
 include("dmrg.jl")
-include("quasiparticle.jl")
+#include("quasiparticle.jl")
 include("precompile.jl")
 end # module
