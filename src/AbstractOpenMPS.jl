@@ -37,13 +37,24 @@ See also: [`expectation_value`](@ref)
 """
 function expectation_values(mps::AbstractOpenMPS, op)
     opLength = operator_length(op)
-    N = length(mps.Γ)
+    N = length(mps)
     vals = Array{ComplexF64,1}(undef, N + 1 - opLength)
     for site = 1:N+1-opLength
         vals[site] = expectation_value(mps,op,site)
     end
     return vals
 end
+function expectation_values(mps::AbstractOpenMPS, op::Vector{T}) where {T}
+    opLength = length(op)
+    N = length(mps)
+    @assert N == opLength + length(op[end])-1
+    vals = Array{ComplexF64,1}(undef,N-length(op[end])+1)
+    for site = 1:N-length(op[end])+1
+        vals[site] = expectation_value(mps,op[site],site)
+    end
+    return vals
+end
+
 
 """
     correlator(mps,op1,op2)

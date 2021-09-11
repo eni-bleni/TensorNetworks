@@ -27,170 +27,108 @@ function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_orde
 end
 
 
-"""
-	apply_layer!(Γout, Λout, Γin, Λin, gates, parity, truncation)
-
-Modify the list of tensor by applying the gates
-
-See also: [`apply_layer`](@ref), [`apply_layer_distributed`](@ref)
-"""
-function apply_layer!(Γout, Λout, Γin, Λin, gates, parity, truncation)
-	N = length(Γin)
+function apply_layer(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
+	N = length(sites)
 	if isodd(N)
 		error("Cell size should be even to be consistent with trotter decomposition")
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	total_error = 0.0
-	for k = itr
-		Γout[k], Λout[k+1], Γout[k+1], error = apply_two_site_gate(view(Γin, k:k+1), view(Λin, k:k+2), gates[k], truncation)
-		total_error += error
-	end
-	return total_error
-end
-
-
-"""
-	apply_layer_distributed(Γout, Λout, Γin, Λin, gates, parity, truncation)
-
-Return the list of tensor acted on by the gates
-
-See also: [`apply_layer!`](@ref)
-"""
-function apply_layer_distributed(Γin, Λin, gates, parity, truncation)
-	N = length(Γin)
-	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
-	end
-	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	total_error = 0.0
-	function apply_gate(k)
-		apply_two_site_gate(Γin[k:k+1], Λin[k:k+2], gates[k], truncation)
-	end
-	ΓlΓe = pmap(k->apply_gate(k),itr)
-	Γout = copy(Γin)
-	Λout = copy(Λin)
-	total_error = 0.0
-	if iseven(parity)
-		Γout[1] = Γin[1]
-		Γout[end] = Γin[end]
-	end
-	for k in 1:length(itr)
-		Γout[itr[k]] = ΓlΓe[k][1]
-		Λout[itr[k]+1] = ΓlΓe[k][2]
-		Γout[itr[k]+1] = ΓlΓe[k][3]
-		total_error += ΓlΓe[k][4]
-	end
-	return Γout, Λout, total_error
-end
-
-"""
-	apply_layer(Γout, Λout, Γin, Λin, gates, parity, truncation)
-
-Return the list of tensors acted on by the gates. Threaded
-
-See also: [`apply_layer!`](@ref), [`apply_layer_distributed`](@ref)
-"""
-function apply_layer(Γin, Λin, gates, parity, truncation)
-	N = length(Γin)
-	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
-	end
-	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	total_error = 0.0
-	Γout = copy(Γin)
-	Λout = copy(Λin)
+	newsites = similar(sites)
 	total_error = Threads.Atomic{Float64}(0.0)
 	Threads.@threads for k in itr
-		Γout[k], Λout[k+1], Γout[k+1], err = apply_two_site_gate(Γin[k:k+1], Λin[k:k+2], gates[k], truncation)
+		newsites[k], newsites[k+1], err = apply_two_site_gate(sites[k],sites[k+1], gates[k], truncation)
 		Threads.atomic_add!(total_error, real(err))
 	end
 	if iseven(parity)
-		Γout[1] = Γin[1]
-		Γout[end] = Γin[end]
+		if isperiodic
+			sites[N], sites[1], error = apply_two_site_gate(sites[N], sites[1], gates[N], truncation)
+			Threads.atomic_add!(total_error, real(error))
+		else
+			newsites[1] = copy(sites[1])
+			newsites[end] = copy(sites[end])
+		end
 	end
-	return Γout, Λout, total_error[]
+	return newsites, total_error[]
 end
 
-"""
-	apply_identity_layer(Γin, Λin, parity, truncation)
-
-Apply the identity layer
-"""
-function apply_identity_layer(Γin, Λin, parity, truncation)
-	N = length(Γin)
+function apply_layer!(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
+	N = length(sites)
 	if isodd(N)
 		error("Cell size should be even to be consistent with trotter decomposition")
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	Γout = similar(Γin)
-	Λout = copy(Λin)
 	total_error = Threads.Atomic{Float64}(0.0)
 	Threads.@threads for k in itr
-		Γout[k], Λout[k+1], Γout[k+1], err = apply_two_site_identity(Γin[k:k+1], Λin[k:k+2], truncation)
-		Threads.atomic_add!(total_error,real(err))
+		sites[k], sites[k+1], error = apply_two_site_gate(sites[k],sites[k+1], gates[k], truncation)
+		Threads.atomic_add!(total_error, real(error))
 	end
-	if iseven(parity)
-		Γout[1] = Γin[1]
-		Γout[end] = Γin[end]
+	if isperiodic && iseven(parity)
+		sites[N], sites[1], error = apply_two_site_gate(sites[N], sites[1], gates[N], truncation)
+		Threads.atomic_add!(total_error, real(error))
 	end
-	return Γout, Λout, total_error[]
+	return sites, total_error[]
 end
 
-"""
-	apply_identity_layer_distributed(Γin, Λin, parity, truncation)
-
-Apply the identity layer distributed over all workers
-"""
-function apply_identity_layer_distributed(Γin, Λin, parity, truncation)
-	N = length(Γin)
+function apply_layer_nonunitary!(sites::Vector{<:OrthogonalLinkSite}, gates, parity, dir, truncation; isperiodic=false)
+	N = length(sites)
 	if isodd(N)
 		error("Cell size should be even to be consistent with trotter decomposition")
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	total_error = 0.0
-	function apply_gate(k)
-		apply_two_site_identity(Γin[k:k+1], Λin[k:k+2], truncation)
-	end
-	ΓlΓe = pmap(k->apply_gate(k),itr)
-	Γout = copy(Γin)
-	Λout = copy(Λin)
-	total_error = 0.0
-	if iseven(parity)
-		Γout[1] = Γin[1]
-		Γout[end] = Γin[end]
-	end
-	for k in 1:length(itr)
-		Γout[itr[k]] = ΓlΓe[k][1]
-		Λout[itr[k]+1] = ΓlΓe[k][2]
-		Γout[itr[k]+1] = ΓlΓe[k][3]
-		total_error += ΓlΓe[k][4]
-	end
-	return Γout, Λout, total_error
-end
-
-"""
-	apply_layer_nonunitary!(Γin, Λin, parity, truncation)
-
-Apply the nonunitary layer
-"""
-function apply_layer_nonunitary!(Γ, Λ, gates, parity, dir, truncation)
-	N = length(Γ)
-	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
-	end
-	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
-	itr = dir==-1 ? itr : Base.reverse(itr)
+	itr = (dir==-1 ? itr : reverse(itr))
 	total_error = 0.0
 	for k = itr
-		Γ[k], Λ[k+1], Γ[k+1], error = apply_two_site_gate(Γ[k:k+1], Λ[k:k+2], gates[k], truncation)
+		sites[k], sites[k+1], error = apply_two_site_gate(sites[k],sites[k+1], gates[k], truncation)
 		total_error += error
-		if k<N-1 && k>1
-			Γ[k+dir], Λ[k+1+dir], Γ[k+1+dir], error = apply_two_site_identity(Γ[(k:k+1) .+ dir], Λ[(k:k+2) .+ dir], truncation)
+		if (k<N-1 && k>1) || isperiodic
+			k1 = mod1.(k+dir,N)
+			k2 = mod1.(k+1+dir,N)
+			sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate, truncation)
+			total_error += error
 		end
-		total_error+=error
 	end
-	return total_error
+	if isperiodic && iseven(parity)
+		sites[N], sites[1], error = apply_two_site_gate(sites[N], sites[1], gates[N], truncation)
+		total_error += error
+		k1 = mod1.(N+dir,N)
+		k2 = mod1.(N+1+dir,N)
+		sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate, truncation)
+		total_error += error
+	end
+	return sites, total_error
 end
+
+"""
+    apply_layers_nonunitary!(mps,layers)
+
+Modify the mps by acting with the nonunitary layers of gates
+"""
+function apply_layers_nonunitary(sitesin::Vector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
+    total_error = 0.0
+	sites = copy(sitesin)
+    for n = 1:length(layers)
+        dir = isodd(n) ? 1 : -1
+        _, error  = apply_layer_nonunitary!(sites, layers[n], n, dir, truncation, isperiodic=isperiodic)
+        total_error += error
+    end
+    return sites, total_error
+end
+
+"""
+    apply_layers_nonunitary!(mps,layers)
+
+Modify the mps by acting with the nonunitary layers of gates
+"""
+function apply_layers(sitesin::Vector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
+    total_error = 0.0
+	sites = copy(sitesin)
+    for n = 1:length(layers)
+        _, error  = apply_layer!(sites, layers[n], n, truncation, isperiodic=isperiodic)
+        total_error += error
+    end
+    return sites, total_error
+end
+
 
 #%% Layers
 """
@@ -218,10 +156,9 @@ end
 
 Return the layers of a 4:th order Trotter scheme
 """
-
-function frgates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
+function frgates(dt,gates::Vector{<:AbstractSquareGate})
    theta = 1/(2-2^(1/3))
-   W = Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,7)
+   W = Vector{Vector{AbstractSquareGate}}(undef,7)
    times = [theta/2 theta (1-theta)/2 (1-2*theta)]
    exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
    W[1:4] = exponentiate.(times)
@@ -234,57 +171,29 @@ function frgates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
    W[7] = W[1]
    return W
 end
-function frgates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
-	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,7)
-	times = [theta/2 theta (1-theta)/2 (1-2*theta)]
-	exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
-	W[1:4] = exponentiate.(times)
-	W[5] = W[3]
-	W[6] = W[2]
-	W[7] = W[1]
-	return W
- end
- frgates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = frgates(dt, [g.data for g in gates])
 
 """
 	st2gates(dt,gates)
 
 Return the layers of a 2:nd order Trotter scheme
 """
-function st2gates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
-   W =  Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,3)
+function st2gates(dt,gates::Vector{<:AbstractSquareGate}) where {T,N}
+   W =  Vector{Vector{AbstractSquareGate}}(undef,3)
    times = [1/2 1]
    exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
    W[1:2] = exponentiate.(times)
    W[3] = W[1]
    return W
 end
-function st2gates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
-	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,3)
-	times = [1/2 1]
-   	exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
-   	W[1:2] = exponentiate.(times)
-   	W[3] = W[1]
-	return W
- end
- st2gates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = st2gates(dt, [g.data for g in gates])
 
 """
 	st1gates(dt,gates)
 
 Return the layers of a 1:st order Trotter scheme
 """
-function st1gates(dt,gates::Vector{GenericSquareGate{T,N}}) where {T,N}
-   W = Vector{Vector{GenericSquareGate{complex(T),N}}}(undef,2)
-   d = size(gates[1],1)
+function st1gates(dt,gates::Vector{<:AbstractSquareGate}) where {T,N}
+   W = Vector{Vector{AbstractSquareGate}}(undef,2)
    W[1] = map(x->exp(-1im*dt*x),gates)
    W[2] = W[1]
    return W
 end
-function st1gates(dt::Real,gates::Vector{HermitianGate{T,N}}) where {T,N}
-	W = Vector{Vector{UnitaryGate{complex(T),N}}}(undef,2)
-	W[1] = map(x->exp(-1im*dt*x),gates)
-	W[2] = W[1]
-	return W
- end
-st1gates(dt::Complex,gates::Vector{HermitianGate{T,N}}) where {T,N} = st1gates(dt, [g.data for g in gates])

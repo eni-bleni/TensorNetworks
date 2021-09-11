@@ -23,7 +23,7 @@ end
 Return the Ising hamiltonian as a list of 2-site gates
 """
 function isingHamGates(L,J,h,g)
-    gates = Vector{HermitianGate{ComplexF64,4}}(undef,L-1)
+    gates = Vector{GenericSquareGate{ComplexF64,4}}(undef,L-1)
     for i=1:L-1
         if i==1
             gate = reshape(-(J*ZZ + h/2*(2XI+IX) + g/2*(2*ZI+IZ)),2,2,2,2)
@@ -32,7 +32,7 @@ function isingHamGates(L,J,h,g)
         else
             gate = reshape(-(J*ZZ + h/2*(XI+IX) + g/2*(ZI+IZ)),2,2,2,2)
         end
-        gates[i] = HermitianGate(gate)
+        gates[i] = GenericSquareGate(gate)
     end
     return gates
 end
@@ -43,14 +43,14 @@ end
 
 Return the identity MPO
 """
-function IdentityMPO(L, d)
+function IdentityMPO(L, d) #FIXME Type stability. Maybe introduce a new type IdentityMPO?
     # mpo = Array{Array{Complex{Float32},4}}(L)
     mpo = Array{Any}(L)
     for i = 1:L
-        mpo[i] = Array{Complex128}(1,d,d,1)
+        mpo[i] = Array{ComplexF64}(1,d,d,1)
         mpo[i][1,:,:,1] = eye(d)
     end
-    return HermitianMPO(mpo)
+    return MPO(mpo)
 end
 
 """
@@ -60,9 +60,9 @@ Returns a translationally invariant one-site mpo
 """
 function translationMPO(L, M)
     mpo = Array{Any}(L)
-    mpo[1] = Array{Complex128}(1,2,2,2)
+    mpo[1] = Array{ComplexF64}(1,2,2,2)
     mpo[1][1,:,:,:] = reshape([si M],2,2,2)
-    mpo[L] = Array{Complex128}(2,2,2,1)
+    mpo[L] = Array{ComplexF64}(2,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([M si], 2,2,2), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
@@ -98,7 +98,7 @@ function IsingMPO(L, J, h, g, shift=0)
         help[2,:,:,3] = sz
         mpo[i] = help
     end
-    return HermitianMPO(mpo)
+    return MPO(mpo)
 end
 
 """
@@ -108,14 +108,14 @@ Returns the Heisenberg gamiltonian as an MPO
 """
 function HeisenbergMPO(L, Jx, Jy, Jz, h)
     mpo = Vector{Array{ComplexF64,4}}(L)
-    mpo[1] = Array{Complex128}(1,2,2,5)
+    mpo[1] = Array{ComplexF64}(1,2,2,5)
     mpo[1][1,:,:,:] = reshape([si Jx*sx Jy*sy Jz*sz h*sx], 2,2,5)
-    mpo[L] = Array{Complex128}(5,2,2,1)
+    mpo[L] = Array{ComplexF64}(5,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([h*sx sx sy sz si], 2,2,5), [3,1,2])
 
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = Array{Complex128}(5,2,2,5)
+        help = Array{ComplexF64}(5,2,2,5)
         help[1,:,:,1] = help[5,:,:,5] = si
         help[1,:,:,2] = Jx*sx
         help[1,:,:,3] = Jy*sy
@@ -131,7 +131,7 @@ function HeisenbergMPO(L, Jx, Jy, Jz, h)
         help[5,:,:,1] = help[5,:,:,2] = help[5,:,:,3] = help[5,:,:,4] = s0
         mpo[i] = help
     end
-    return HermitianMPO(mpo)
+    return MPO(mpo)
 end
 
 """

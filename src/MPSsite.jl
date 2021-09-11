@@ -1,85 +1,335 @@
 operator_length(op::AbstractSite) = 1
 
 Base.permutedims(site::GenericSite, perm) = GenericSite(permutedims(site.Γ,perm), site.purification)
-Base.copy(site::LinkSite{T}) where {T} = LinkSite([copy(getfield(site, k)) for k = 1:length(fieldnames(LinkSite))]...) 
-Base.copy(site::GenericSite{T}) where {T} = GenericSite([copy(getfield(site, k)) for k = 1:length(fieldnames(GenericSite))]...) 
-Base.size(site::AbstractSite) = size(site.Γ)
-Base.size(site::AbstractSite, dim) = size(site.Γ, dim)
+Base.copy(site::OrthogonalLinkSite) = OrthogonalLinkSite([copy(getfield(site, k)) for k = 1:length(fieldnames(OrthogonalLinkSite))]...) 
+Base.copy(site::GenericSite) = GenericSite([copy(getfield(site, k)) for k = 1:length(fieldnames(GenericSite))]...) 
 
-function transfer_matrix(mps::LinkSite, mpo::MPOsite, direction=:left)
-    if mps.purification
+Base.size(site::AbstractSite, dim) = size(data(site), dim)
+Base.size(site::AbstractSite) = size(data(site))
+Base.size(site::OrthogonalLinkSite) = size(site.Γ)
+Base.size(site::OrthogonalLinkSite, dim) = size(site.Γ, dim)
+Base.size(site::VirtualSite, dim) = size(site.Λ, dim)
+Base.size(site::VirtualSite) = size(site.Λ)
+Base.length(site::LinkSite) = length(site.Λ)
+
+Base.isapprox(s1::AbstractSite,s2::AbstractSite) = isapprox(data(s1),data(s2))
+
+ispurification(site::GenericSite) = site.purification
+ispurification(site::OrthogonalLinkSite) = ispurification(site.Γ)
+
+data(site::GenericSite) = site.Γ
+data(site::VirtualSite) = site.Λ
+data(site::LinkSite) = site.Λ
+
+isleftcanonical(site::AbstractSite)  = isleftcanonical(data(site))
+isleftcanonical(site::OrthogonalLinkSite) = isleftcanonical(site.Λ1*site.Γ)
+isrightcanonical(site::AbstractSite) = isrightcanonical(data(site))
+isrightcanonical(site::OrthogonalLinkSite) = isrightcanonical(site.Γ*site.Λ2)
+iscanonical(site::OrthogonalLinkSite) = isrightcanonical(site) && isleftcanonical(site) && norm(site.Λ1) ≈ 1 && norm(site.Λ2) ≈ 1
+
+entanglement_entropy(Λ::LinkSite) = -sum(data(Λ) .* log.(data(Λ)))
+
+GenericSite(site::GenericSite) = GenericSite(data(site),ispurification(site))
+
+Base.convert(::Type{LinkSite{T}}, Λ::LinkSite{K}) where {K,T} = LinkSite(convert.(T,Λ.Λ))
+
+LinearAlgebra.norm(site::GenericSite) = norm(data(site))
+LinearAlgebra.norm(site::LinkSite) = norm(data(site))
+LinearAlgebra.norm(site::VirtualSite) = norm(data(site))
+
+function LeftOrthogonalSite(site::OrthogonalLinkSite; check=true) 
+	L = site.Λ1*site.Γ
+	check || @assert isleftcanonical(L) "In LeftOrthogonalSite: site is not left canonical"
+	return L
+end
+function RightOrthogonalSite(site::OrthogonalLinkSite; check=true) 
+	R = site.Γ*site.Λ2
+	check || @assert isrightcanonical(R) "In RightOrthogonalSite: site is not right canonical"
+	return R
+end
+
+"""
+LeftOrthogonalSite(site::GenericSite, dir)-> A,R,DB
+
+Return the left orthogonal form of the input site as well as the remainder.
+"""
+function to_left_orthogonal(site::GenericSite; full=false, method=:qr, truncation=DEFAULT_OPEN_TRUNCATION)
+    D1,d,D2 = size(site)
+    M = reshape(data(site),D1*d,D2)
+	if method ==:qr
+    	U,R = qr(M) 
+		A = full ? U * Matrix(I,D2,D2) : Matrix(U)
+	elseif method==:svd
+		U, S, Vt, Dm, err = split_truncate!(copy(M), truncation)
+		A = Matrix(U)
+		R = Diagonal(S)*Vt
+	else
+		error("Choose :qr or :svd as method in 'to_left_orthogonal'")
+	end
+    Db = size(R,1) # intermediate bond dimension
+	orthSite = GenericSite(reshape(A,D1,d,Db), site.purification)
+	V = VirtualSite(R)
+    return orthSite, V
+end
+function to_right_orthogonal(site::GenericSite; full=false, method=:qr)
+	#M = permutedims(site,[3,2,1])
+	L, V = to_left_orthogonal(reverse_direction(site), full=full,method=method)
+	reverse_direction(L), transpose(V)
+end
+
+function LinearAlgebra.svd(site::GenericSite, orth = :leftorthogonal)
+	s = size(site)
+	if orth == :leftorthogonal
+		m = reshape(data(site),s[1]*s[2],s[3])
+		F = svd(m)
+		U = GenericSite(reshape(F.U,s),site.purification)
+		S = LinkSite(F.S)
+		Vt = VirtualSite(F.Vt)
+	elseif orth == :rightorthogonal
+		m = reshape(data(site),s[1],s[2]*s[3])
+		F = svd(m)
+		U = VirtualSite(F.U)
+		S = LinkSite(F.S)
+		Vt = GenericSite(reshape(F.Vt,s),site.purification)
+	else
+		error("Choose :leftorthogonal or :rightorthogonal")
+	end
+	return U,S,Vt
+end
+
+function reverse_direction(site::GenericSite)
+	GenericSite(permutedims(data(site),[3,2,1]), site.purification)
+end
+
+Base.transpose(G::VirtualSite) = VirtualSite(Matrix(transpose(G.Λ)))
+Base.transpose(Λ::LinkSite) = Λ
+
+Base.:*(Γ::GenericSite, α::Number) = GenericSite(α*data(Γ),Γ.purification)
+Base.:*(α::Number, Γ::GenericSite) = GenericSite(α*data(Γ),Γ.purification)
+Base.:/(Γ::GenericSite, α::Number) = GenericSite(data(Γ)/α,Γ.purification)
+Base.:*(Λ::LinkSite, G::VirtualSite) = VirtualSite(reshape(Λ.Λ,size(G,1),1) .* G.Λ)
+Base.:*(G::VirtualSite, Λ::LinkSite) = VirtualSite(reshape(Λ.Λ,1,size(G,2)) .* G.Λ)
+Base.:/(Γ::LinkSite, α::Number) = LinkSite(data(Γ)/α)
+Base.:/(Γ::VirtualSite, α::Number) = VirtualSite(data(Γ)/α)
+
+
+Base.:*(Λ::LinkSite, Γ::GenericSite) = GenericSite(reshape(Λ.Λ,size(Γ,1),1,1) .* data(Γ), Γ.purification)
+Base.:*(Γ::GenericSite, Λ::LinkSite) = GenericSite(data(Γ) .* reshape(Λ.Λ,1,1,size(Γ,3)), Γ.purification)
+function Base.:*(G::VirtualSite, Γ::GenericSite)
+	@tensor Γnew[:] := data(G)[-1,1] * data(Γ)[1,-2,-3]
+	GenericSite(Γnew, Γ.purification)
+end
+function Base.:*(Γ::GenericSite, G::VirtualSite)
+	@tensor Γnew[:] := data(Γ)[-1,-2,1] * data(G)[1,-3]
+	GenericSite(Γnew, Γ.purification)
+end
+
+Base.inv(G::VirtualSite) = VirtualSite(inv(G.Λ))
+Base.inv(Λ::LinkSite) = LinkSite(1 ./ Λ.Λ)
+
+"""
+	svd(Γ1::GenericSite, Γ2::GenericSite, args::TruncationArgs)
+
+Contract and compress the two sites using the svd. Return two U,S,V,err where U is a LeftOrthogonalSite, S is a LinkSite and V is a RightOrthogonalSite
+"""
+function compress(Γ1::GenericSite, Γ2::GenericSite, args::TruncationArgs)
+    @tensor theta[:] := data(Γ1)[-1,-2,5]*data(Γ2)[5,-3,-4]
+	DL,d,d,DR = size(theta)
+
+	U,S,Vt,Dm,err = split_truncate(theta,args)
+	U2 = GenericSite(reshape(U,DL,d,Dm), ispurification(Γ1))
+	Vt2 = GenericSite(reshape(Vt,Dm,d,DR), ispurification(Γ2))
+	S2 = LinkSite(S)
+    return U2, S2, Vt2, err
+end
+
+function compress(Γ1::OrthogonalLinkSite, Γ2::OrthogonalLinkSite, args::TruncationArgs)
+    @assert Γ1.Λ2 == Γ2.Λ1 "Svd error: The sites do not share a link"
+	ΓL = LeftOrthogonalSite(Γ1)
+	ΓR = Γ2.Λ1*RightOrthogonalSite(Γ2)
+	
+	U,S,Vt,err = compress(ΓL, ΓR, args)
+
+	U2 = inv(Γ1.Λ1)*U
+    Vt2 = Vt*inv(Γ2.Λ2)
+	Γ1new = OrthogonalLinkSite(Γ1.Λ1,U2,S)
+	Γ2new = OrthogonalLinkSite(S,Vt2,Γ2.Λ2)
+    return Γ1new, Γ2new, err
+end
+
+function to_left_right_orthogonal(M::Vector{GenericSite{T}}; center=1, method=:qr) where {T}
+	N = length(M)
+    @assert N+1>=center>=0 "Error in 'to_left_right_orthogonal': Center is not within the chain, center==$center"
+	M = deepcopy(M)
+	Γ = similar(M)
+    local G::VirtualSite{T}
+    for i in 1:center-1
+        Γ[i], G = to_left_orthogonal(M[i], method= method)
+        i<N && (M[i+1] = G*M[i+1])
+    end
+    for i in N:-1:center+1
+        Γ[i], G = to_right_orthogonal(M[i], method = method)
+        i>1 && (M[i-1] = M[i-1]*G)
+    end
+	
+	if center == 0 || center==N+1
+		if !(data(G) ≈ ones(T,1,1)) 
+			@warn "In to_orthogonal!: remainder is not 1 at the end of the chain. $G"
+		end
+	else
+		Γ[center] = M[center]/norm(M[center])
+	end
+    # if center>1 && center < N+1
+    #     out[center-1], S, out[center], err = compress(out[center-1]*G, out[center], mps.truncation)
+    # else
+	# 	err=0.0
+    #     if !(G.Λ ≈ ones(T,1,1)) 
+	# 		@warn "In to_orthogonal!: remainder is not 1 at the end of the chain. $G"
+	# 	end
+    #     S = LinkSite([one(T)])
+    # end
+
+    return Γ
+end
+function to_right_orthogonal(M::Vector{GenericSite{T}}; method=:qr) where {T}
+    out = Vector{GenericSite{T}}(undef,length(M))
+	M2 = copy(M)
+	N = length(M)
+    local G::VirtualSite{T}
+    for i in N:-1:1
+        out[i], G = to_right_orthogonal(M2[i], method=method)
+ 		if i>1
+			M2[i-1] = M2[i-1]*G
+		end
+    end
+	# if !(G.Λ ≈ ones(T,1,1)) 
+	# 	@warn "In to_right_orthogonal: remainder is not 1 at the end of the chain. $G"
+	# end
+    return out, G
+end
+
+
+transfer_left(site::OrthogonalLinkSite) = transfer_left(RightOrthogonalSite(site))
+transfer_right(site::OrthogonalLinkSite) = transfer_right(LeftOrthogonalSite(site))
+transfer_left(site::OrthogonalLinkSite, mpo::MPOsite) = transfer_left(RightOrthogonalSite(site), mpo)
+transfer_right(site::OrthogonalLinkSite, mpo::MPOsite) = transfer_right(LeftOrthogonalSite(site), mpo)
+transfer_right(site::GenericSite) = transfer_right(data(site))
+transfer_left(site::GenericSite) = transfer_left(data(site))
+function transfer_right(site::GenericSite, mpo::MPOsite)
+	if ispurification(site)
+		mpo = auxillerate(mpo)
+	end
+	transfer_right(data(site), mpo)
+end
+function transfer_left(site::GenericSite,mpo::MPOsite)
+	if ispurification(site)
+		mpo = auxillerate(mpo)
+	end	
+	transfer_left(data(site), mpo)
+end
+
+function transfer_matrix(site::OrthogonalLinkSite, mpo::MPOsite, direction=:left)
+    if ispurification(site)
 		mpo = auxillerate(mpo)
 	end
 	if direction == :left
-		T = transfer_left(mps.Γ, mps.Λ2, mpo)
+		T = transfer_left(data(site.Γ*site.Λ2), mpo)
 	elseif direction == :right
-		T = transfer_right(mps.Γ, mps.Λ1, mpo)
+		T = transfer_right(data(site.Λ1*site.Γ), mpo)
 	else
 		error("Choose direction :left or :right")
 	end
 	return T
 end
-
-function transfer_matrix(mps::GenericSite{K}, direction=:left) where {K}
+function transfer_matrix(site::OrthogonalLinkSite, direction=:left)
 	if direction == :left
-		T = transfer_left(mps.Γ)
+		T = transfer_left(data(site.Γ*site.Λ2))
 	elseif direction == :right
-		T = transfer_right(mps.Γ)
+		T = transfer_right(data(site.Λ1*site.Γ))
 	else
 		error("Choose direction :left or :right")
 	end
 	return T
 end
 
-function transfer_matrix(mps::GenericSite, mpo::MPOsite, direction=:left)
-    if mps.purification
+function transfer_matrix(site::GenericSite, direction=:left)
+	if direction == :left
+		T = transfer_left(data(site))
+	elseif direction == :right
+		T = transfer_right(data(site))
+	else
+		error("Choose direction :left or :right")
+	end
+	return T
+end
+
+function transfer_matrix(site::GenericSite, mpo::MPOsite, direction=:left)
+    if ispurification(site)
 		mpo = auxillerate(mpo)
 	end
 	if direction == :left
-		T = transfer_left(mps.Γ, mpo)
+		T = transfer_left(data(site), mpo)
 	elseif direction == :right
-		T = transfer_right(mps.Γ, mpo)
+		T = transfer_right(data(site), mpo)
 	else
 		error("Choose direction :left or :right")
 	end
 	return T
 end
 
-function GenericSite(site::LinkSite{T}, direction = :left) where {T}
+function GenericSite(site::OrthogonalLinkSite, direction = :left)
 	if direction==:left
-		return GenericSite{T}(absorb_l(site.Γ, site.Λ1, :left), site.purification)
+		return site.Λ1*site.Γ
 	elseif direction==:right
-		return GenericSite{T}(absorb_l(site.Γ, site.Λ2, :right), site.purification)
+		return site.Γ*site.Λ2
 	end
 end
 
-# function absorb_on(site::LinkSite{T}, direction = :left) where {T}
+# function absorb_on(site::OrthogonalLinkSite{T}, direction = :left) where {T}
 # 	if direction==:left
 # 		return GenericSite{T}(absorb_l(site.Γ, site.Λ1, :left), site.purification)
 # 	elseif direction==:right
 # 		return GenericSite{T}(absorb_l(site.Γ, site.Λ2, :right), site.purification)
 # 	end
 # end
-absorb(site::LinkSite{T}) where {T} = GenericSite{T}(absorb_l(site.Λ1, site.Γ, site.Λ2), site.purification)
+absorb(site::OrthogonalLinkSite) = GenericSite(absorb_l(site.Λ1, site.Γ, site.Λ2), site.purification)
 
-expectation_value(site::LinkSite, mpo::MPOsite) = expectation_value(absorb(site),mpo)
+expectation_value(site::OrthogonalLinkSite, mpo::MPOsite) = expectation_value(absorb(site),mpo)
 
-"""
-	auxillerate(gate::AbstractSquareGate{T,N})
-
-Return gate_phys⨂Id_aux
-"""
-function auxillerate(op::GenericSquareGate{T,N}) where {T,N}
-	opSize = size(op)
-	d::Int = opSize[1]
-	opLength = Int(N/2)
-	idop = reshape(Matrix{T}(I,d^opLength,d^opLength),opSize...)
-	odds = -1:-2:(-4*opLength)
-	evens = -2:-2:(-4*opLength)
-	tens::Array{T,2*N} = ncon((op.data,idop),(odds,evens))
-	return GenericSquareGate(reshape(tens,(opSize .^2)...))
+function ΓΛ(sites::Vector{OrthogonalLinkSite{T}}) where {T}
+	N = length(sites)
+	Γ = Vector{GenericSite{T}}(undef,N)
+    Λ = Vector{LinkSite{T}}(undef,N+1)
+    for k in 1:N
+        Γ[k] = sites[k].Γ
+        Λ[k] = sites[k].Λ1
+    end
+    Λ[N+1] = sites[N].Λ2
+	return Γ, Λ 
 end
 
-function auxillerate(gate::HermitianGate{T,N}) where {T,N}
-	HermitianGate(auxillerate(gate.data))
+function randomGenericSite(Dl,d,Dr, T = ComplexF64; purification = false)
+	Γ = rand(T,Dl,d,Dr)
+	return GenericSite(Γ/norm(Γ), purification)
+end
+
+function randomLeftOrthogonalSite(Dl,d,Dr, T = ComplexF64; purification = false, method=:qr)
+	Γ = randomGenericSite(Dl,d,Dr,T,purification=purification)
+	return to_left_orthogonal(Γ, method=method)[1]
+end
+
+function randomRightOrthogonalSite(Dl,d,Dr, T = ComplexF64; purification = false, method=:qr)
+	Γ = randomGenericSite(Dl,d,Dr,T,purification=purification)
+	return to_right_orthogonal(Γ, method=method)[1]
+end
+
+function randomOrthogonalLinkSite(Dl,d,Dr, T = ComplexF64; purification = false)
+	Γ = randomGenericSite(Dl,d,Dr,T,purification=purification)
+	_, ΛL0,_ = svd(Γ, :leftorthogonal)
+	_,_,ΓR = svd(Γ, :rightorthogonal)
+	ΛL = ΛL0/norm(ΛL0)
+	R = ΛL*ΓR
+	U, ΛR,_ = svd(R, :leftorthogonal)
+	final = inv(ΛL)*U
+	return OrthogonalLinkSite(final, ΛL, ΛR)
 end

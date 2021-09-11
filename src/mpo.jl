@@ -2,47 +2,64 @@
 
 struct MPOsite{T<:Number} <: AbstractArray{T,4}
     data::Array{T,4}
+    # ishermitian::Bool
+    # isunitary::Bool
 end
-function MPOsite(op::Array{T,2}) where {T}
+function MPOsite(op::Array{<:Number,2})
     sop = size(op)
     return MPOsite(reshape(op,1,sop[1],sop[2],1))
 end
+function MPOsite(op::Array{T,4}) where {T}
+    return MPOsite{T}(op)
+end
+# function MPOsite(op::Array{<:Number,4})
+#     return MPOsite(op, norm(op - conj(permutedims(op,[1,3,2,4]))) ≈ 0)
+# end
+data(site::MPOsite) = site.data
+Base.eltype(site::MPOsite{T}) where {T} = T
+# LinearAlgebra.ishermitian(site::MPOsite) = site.ishermitian
+# isunitary(site::MPOsite) = site.isunitary
+reverse_direction(site::MPOsite) = MPOsite(permutedims(data(site),[4,2,3,1]))
+Base.transpose(site::MPOsite) = MPOsite(permutedims(data(site),[1,3,2,4]))
+Base.adjoint(site::MPOsite) = MPOsite(conj(permutedims(data(site),[1,3,2,4])))
+Base.conj(site::MPOsite) = MPOsite(conj(data(site)))
+Base.:+(site1::MPOsite,site2::MPOsite) = MPOsite(data(site1) .+ data(site2)) 
 
-abstract type AbstractMPO{T<:Number} <: AbstractArray{MPOsite{T}, 1} end
+abstract type AbstractMPO{T<:Number} <: AbstractVector{MPOsite{T}} end
 
 struct MPO{T<:Number} <: AbstractMPO{T}
     data::Vector{MPOsite{T}}
 end
 
-struct HermitianMPO{T<:Number} <: AbstractMPO{T}
-    data::MPO{T}
-    function HermitianMPO(mpo::MPO{T}) where {T}
-        mpo = MPO([(m+ conj(permutedims(m,[1,3,2,4])))/2 for m in mpo.data])
-        new{T}(mpo)
-    end
-    function HermitianMPO(sites::Vector{MPOsite{T}}) where {T}
-        mpo = MPO([(site + conj(permutedims(site,[1,3,2,4])))/2 for site in sites])
-        new{T}(mpo)
-    end
-end
+# struct HermitianMPO{T<:Number} <: AbstractMPO{T}
+#     data::MPO{T}
+#     function HermitianMPO(mpo::MPO{T}) where {T}
+#         mpo = MPO([(m+ conj(permutedims(m,[1,3,2,4])))/2 for m in mpo.data])
+#         new{T}(mpo)
+#     end
+#     function HermitianMPO(sites::Vector{MPOsite{T}}) where {T}
+#         mpo = MPO([(site + conj(permutedims(site,[1,3,2,4])))/2 for site in sites])
+#         new{T}(mpo)
+#     end
+# end
 
 MPO(mpo::MPOsite) = MPO([mpo])
-MPO(op::Array{T,2}) where {T} = MPO(MPOsite(op))
-MPO(ops::Array{T,1}) where {T} = MPO(map(op->MPOsite(op),ops))
+MPO(op::Array{<:Number,2}) = MPO(MPOsite(op))
+MPO(ops::Vector{T}) where {T} = MPO(map(MPOsite,ops))
+data(mpo::MPO) = mpo.data
+# HermitianMPO(mpo::MPOsite) = HermitianMPO(MPO([mpo]))
+# HermitianMPO(op::Array{T,2}) where {T<:Number} = HermitianMPO(MPOsite(op))
+# HermitianMPO(ops::Array{Array{T,4},1}) where {T<:Number} = HermitianMPO(map(op->MPOsite(op),ops))
 
-
-HermitianMPO(mpo::MPOsite) = HermitianMPO(MPO([mpo]))
-HermitianMPO(op::Array{T,2}) where {T<:Number} = HermitianMPO(MPOsite(op))
-HermitianMPO(ops::Array{Array{T,4},1}) where {T<:Number} = HermitianMPO(map(op->MPOsite(op),ops))
-
-Base.size(mposite::MPOsite) = size(mposite.data)
-Base.size(mpo::AbstractMPO) = size(mpo.data)
+Base.size(mposite::MPOsite) = size(data(mposite))
+Base.size(mpo::AbstractMPO) = size(data(mpo))
+Base.length(mpo::MPO) = length(data(mpo))
 Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
 Base.IndexStyle(::Type{<:AbstractMPO}) = IndexLinear()
 Base.getindex(mpo::MPOsite, i::Integer) = mpo.data[i]
 Base.getindex(mpo::AbstractMPO, i::Integer) = mpo.data[i]
-Base.setindex!(mpo::MPOsite, v, I::Vararg{Integer,4}) = (mpo.data[I] = v)
-Base.setindex!(mpo::AbstractMPO, v, I::Vararg{Integer,N}) where {N} = (mpo.data[I] = v)
+#Base.setindex!(mpo::MPOsite, v, I::Vararg{Integer,4}) = (mpo.data[I] = v)
+#Base.setindex!(mpo::AbstractMPO, v, I::Vararg{Integer,N}) where {N} = (mpo.data[I] = v)
 
 operator_length(mpo::AbstractMPO) = length(mpo)
 operator_length(mpo::MPOsite) = 1
@@ -52,22 +69,22 @@ operator_length(mpo::MPOsite) = 1
 
 Return tensor⨂Id_aux
 """
-function auxillerate(mpo::MPOsite{T}) where {T}
+function auxillerate(mpo::MPOsite)
 	sop = size(mpo)
 	d = sop[2]
-	idop = Matrix{T}(I,d,d)
+	idop = Matrix{eltype(mpo)}(I,d,d)
 	@tensor tens[:] := idop[-3,-5]*mpo.data[-1,-2,-4,-6]
-	return MPOsite{T}(reshape(tens,sop[1],d^2,d^2,sop[4]))
+	return MPOsite(reshape(tens,sop[1],d^2,d^2,sop[4]))
 end
 
 auxillerate(mpo::MPO) = MPO(auxillerate.(mpo.data))
-auxillerate(mpo::HermitianMPO) = HermitianMPO(auxillerate.(mpo.data))
+#auxillerate(mpo::HermitianMPO) = HermitianMPO(auxillerate.(mpo.data))
 
 # %% Todo
 """
 gives the mpo corresponding to a*mpo1 + b*mpo2.
 """
-function addmpos(mpo1,mpo2,a,b,Dmax,tol=0)
+function addmpos(mpo1,mpo2,a,b,Dmax,tol=0) #FIXME
     L = length(mpo1)
     d = size(mpo1[1])[2]
     mpo = Array{Array{Complex{Float64}}}(L)
@@ -100,7 +117,7 @@ end
 """
 ```multiplyMPOs(mpo1,mpo2; c=true)```
 """
-function multiplyMPOs(mpo1,mpo2; c=true)
+function multiplyMPOs(mpo1,mpo2; c=true) #FIXME
     L = length(mpo1)
     mpo = similar(mpo1)
     for j=1:L

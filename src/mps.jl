@@ -1,9 +1,10 @@
 
 Base.length(mps::AbstractMPS) = length(mps.Γ)
 Base.getindex(mps::AbstractMPS, I) = [mps[i] for i in I]
+ispurification(mps::AbstractMPS) = ispurification(mps[1])
 
 function prepare_layers(mps::AbstractMPS, gs::Vector{<:AbstractSquareGate}, dt, trotter_order)
-	gates = (mps.purification ? auxillerate.(gs) : gs)
+	gates = ispurification(mps) ? auxillerate.(gs) : gs
 	return prepare_layers(gates,dt,trotter_order)
 end
 
@@ -26,7 +27,7 @@ function get_thermal_states(mps::AbstractMPS, hamGates, βs, dβ; order=2)
 		Nsteps = floor((βs[n]-β)/dβ)
 		count=0
 		while β < βs[n]
-			apply_layers_nonunitary!(mps,layers)
+			mps = apply_layers_nonunitary(mps,layers)
 			canonicalize!(mps)
 			β += dβ
 			count+=1
@@ -49,7 +50,7 @@ Apply the operator at every site
 function apply_local_op!(mps,op)
     N = length(mps.Γ)
 	Γ = mps.Γ
-	if mps.purification
+	if ispurification(mps)
 		op = auxillerate(op)
 	end
  	for n in 1:N
@@ -62,10 +63,10 @@ end
 
 Apply the operator at the site
 """
-function apply_local_op!(mps,op,site::Integer)
+function apply_local_op!(mps,op,site::Integer) #FIXME pass through to operation on site
     N = length(mps.Γ)
 	Γ = mps.Γ
-	if mps.purification
+	if ispurification(mps)
 		op = auxillerate(op)
 	end
     @tensor mps.Γ[site][:] := mps.Γ[site][-1,2,-3]*op[-2,2]

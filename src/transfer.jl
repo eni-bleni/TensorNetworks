@@ -6,10 +6,11 @@ Return the transfer matrices of `mps`
 
 See also: [`transfer_matrix`](@ref), [`transfer_matrices_squared`](@ref)
 """
-function transfer_matrices(mps::AbstractMPS, direction=:left)
-	N = length(mps.Γ)
-	return map(site->transfer_matrix(mps,site,direction), 1:N)
-end
+transfer_matrices(mps::AbstractMPS, direction=:left) = [transfer_matrix(site,direction) for site in mps[1:end]]
+
+
+transfer_matrix(mps::AbstractMPS, mpo::MPOsite, site::Integer, direction=:left)	= transfer_matrix(mps[site], mpo, direction)
+
 
 """
 	transfer_matrices(mps::AbstractMPS, mpo::AbstractMPO, site::Integer, direction=:left)
@@ -40,7 +41,7 @@ Return the transfer matrices of  the squared `mps`
 See also: [`transfer_matrices`](@ref)
 """
 function transfer_matrices_squared(mps::AbstractMPS, direction=:left)
-	N = length(mps.Γ)
+	N = length(mps)
 	return map(site->transfer_matrix_squared(mps, site, direction), 1:N)
 end
 
@@ -60,13 +61,9 @@ function transfer_matrix(mps::AbstractMPS, direction=:left)
 	return N==1 ? Ts[1] : *(Ts...)
 end
 
-function transfer_matrices(sites::Vector{GenericSite{T}}, direction=:left) where {T}
-	N = length(sites)
-	return map(k -> transfer_matrix(sites[k],direction), 1:N)
-end
-
-function transfer_matrix(sites::Vector{GenericSite{T}}, direction=:left) where {T}
-	Ts = transfer_matrices(sites,direction)
+transfer_matrices(sites::Vector{<:AbstractSite}, direction=:left) = [transfer_matrix(site, direction) for site in sites]
+function transfer_matrix(sites::Vector{<:AbstractSite}, direction=:left)
+	Ts = transfer_matrices(sites, direction)
 	N = length(Ts)
 	if direction == :right
 		Ts = Ts[N:-1:1]
@@ -81,25 +78,10 @@ Return the transfer matrix at `site` with `op` sandwiched
 
 See also: [`transfer_matrices`](@ref)
 """
-function transfer_matrix(mps::AbstractMPS, op::AbstractGate{T,N_op}, site, direction = :left) where {T,N_op}
+function transfer_matrix(mps::AbstractMPS, op::AbstractGate{T,N_op}, site::Integer, direction = :left) where {T,N_op}
 	oplength = Int(N_op/2)
-	N = length(mps.Γ)
     Γ = mps[site:(site+oplength-1)]
     transfer_matrix(Γ,op,direction)
-end
-
-"""
-	transfer_matrix(mps::OrthOpenMPS, op::AbstractGate{T,N_op}, site, direction = :left)
-
-Return the transfer matrix at `site` with `op` sandwiched
-
-See also: [`transfer_matrices`](@ref)
-"""
-function transfer_matrix(mps::OrthOpenMPS, op::AbstractGate{T,N_op}, site, direction = :left) where {T,N_op}
-	oplength = Int(N_op/2)
-	N = length(mps.Γ)
-    Γ = mps[site:(site+oplength-1)]
-    return transfer_matrix(Γ,op,direction)
 end
 
 """
@@ -119,37 +101,14 @@ function transfer_matrix(mps::AbstractMPS, mpo::AbstractMPO; site::Integer =1, d
 end
 
 """
-	transfer_left(Γ, Λ)
-
-Returns the left transfer matrix of a single site
-
-See also: [`transfer_right`](@ref)
-"""
-function transfer_left(Γin::Array{T,3}, Λ) where {T}
-    dims = size(Γin)
-    Γ = reshape(Λ,1,1,dims[3]) .* Γin
-    function func(Rvec)
-        Rtens = reshape(Rvec,dims[3],dims[3])
-        @tensoropt (t1,b1,-1,-2) temp[:] := Rtens[t1,b1]*conj(Γ[-1, c1, t1])*Γ[-2, c1, b1]
-        return vec(temp)
-    end
-	function func_adjoint(Lvec)
-		Ltens = reshape(Lvec,dims[1],dims[1])
-		@tensoropt (t1,b1,-1,-2) temp[:] := Ltens[b1,t1]*conj(Γ[b1, c1, -1])*Γ[t1, c1, -2]
-		return vec(temp)
-	end
-    return LinearMap{T}(func,func_adjoint, dims[1]^2,dims[3]^2)
-end
-
-"""
 	transfer_left(Γ)
 
 Returns the left transfer matrix of a single site
 
 See also: [`transfer_right`](@ref)
 """
-function transfer_left(Γin::Array{T,3}) where {T}
-    dims = size(Γin)
+function transfer_left(Γ::Array{T,3}) where {T}
+    dims = size(Γ)
     function func(Rvec)
         Rtens = reshape(Rvec,dims[3],dims[3])
         @tensoropt (t1,b1,-1,-2) temp[:] := Rtens[t1,b1]*conj(Γ[-1, c1, t1])*Γ[-2, c1, b1]
@@ -163,17 +122,6 @@ function transfer_left(Γin::Array{T,3}) where {T}
     return LinearMap{T}(func,func_adjoint, dims[1]^2,dims[3]^2)
 end
 
-"""
-	transfer_right(Γ, Λ)
-
-Returns the right transfer matrix of a single site
-
-See also: [`transfer_left`](@ref)
-"""
-function transfer_right(Γ::Array{T,3}, Λ) where {T}
-	Γp = permutedims(Γ,[3,2,1])
-	return transfer_left(Γp,Λ)
-end
 """
 	transfer_right(Γ)
 
@@ -181,23 +129,11 @@ Returns the right transfer matrix of a single site
 
 See also: [`transfer_left`](@ref)
 """
-function transfer_right(Γ::Array{T,3}) where {T}
-	Γp = permutedims(Γ,[3,2,1])
+function transfer_right(Γ::Array{<:Number,3})
+	Γp = reverse_direction(Γ)
 	return transfer_left(Γp)
 end
-
-"""
-	transfer_right(Γ, Λ, mpoSite)
-
-Returns the right transfer matrix of a single site with `mpo` sandwiched
-
-See also: [`transfer_left`](@ref)
-"""
-function transfer_right(Γ::Array{T,3},Λ, mpo::MPOsite) where {T}
-	Γp = permutedims(Γ,[3,2,1])
-	mpop = MPOsite(permutedims(mpo,[4,2,3,1]))
-	return transfer_left(Γp,Λ,mpop)
-end
+reverse_direction(Γ::Array{<:Number,3}) = permutedims(Γ,[3,2,1])
 """
 	transfer_right(Γ, mpoSite)
 
@@ -205,35 +141,12 @@ Returns the right transfer matrix of a single site with `mpo` sandwiched
 
 See also: [`transfer_left`](@ref)
 """
-function transfer_right(Γ::Array{T,3}, mpo::MPOsite) where {T}
-	Γp = permutedims(Γ,[3,2,1])
-	mpop = MPOsite(permutedims(mpo,[4,2,3,1]))
+function transfer_right(Γ::Array{<:Number,3}, mpo::MPOsite)
+	Γp = reverse_direction(Γ)
+	mpop = reverse_direction(mpo)
 	return transfer_left(Γp,mpop)
 end
 
-"""
-	transfer_left(Γ, Λ, mpoSite)
-
-Returns the left transfer matrix of a single site with `mpo` sandwiched
-
-See also: [`transfer_right`](@ref)
-"""
-function transfer_left(Γin::Array{T,3}, Λ, mpo::MPOsite) where {T}
-    dims = size(Γin)
-	smpo = size(mpo)
-    Γ =  Γin .* reshape(Λ,1,1,dims[3])
-    function func(Rvec)
-        Rtens = reshape(Rvec,dims[3],smpo[4],dims[3])
-        @tensoropt (tr,br,-1,-2,-3) temp[:] := conj(Γ[-1, u, tr])*mpo.data[-2,u,d,cr]*Γ[-3, d, br]*Rtens[tr,cr,br]
-        return vec(temp)
-    end
-	function func_adjoint(Lvec)
-		Ltens = reshape(Lvec,dims[1],smpo[1],dims[1])
-		@tensoropt (bl,tl,-1,-2,-3) temp[:] := Ltens[bl,cl,tl]*conj(Γ[tl, u, -3])*mpo.data[cl,u,d,-2]*Γ[bl, d, -1]
-		return vec(temp)
-	end
-    return LinearMap{T}(func,func_adjoint, smpo[1]*dims[1]^2,smpo[4]*dims[3]^2)
-end
 """
 	transfer_left(Γ, mpoSite)
 
@@ -258,79 +171,6 @@ function transfer_left(Γ::Array{T,3}, mpo::MPOsite) where {T<:Number}
 end
 
 
-# function transfer_matrix(Γ::Array{Array{T,3},1}, Λ, op::Array{T_op,N_op}, direction = :left) where {T, T_op<:Number, N_op}
-# 	oplength = Int(N_op/2)
-# 	opsize = size(op)
-# 	if direction == :left
-# 		Γnew = copy(reverse(Γ))
-# 		for k = 1:oplength
-# 			 absorb_l!(Γnew[oplength+1-k] ,Γ[k], Λ[k+1])
-# 			 Γnew[oplength+1-k] = permutedims(Γnew[oplength+1-k], [3,2,1])
-# 			 op = permutedims(op,[oplength:-1:1..., 2*oplength:-1:oplength+1...])
-# 			 #Γnew[k] = absorb_l(Γ[k], Λ[mod1(k+1,N)], :right)
-# 		end
-# 	elseif direction == :right
-# 		Γnew = copy(Γ)
-# 		for k = 1:oplength
-# 			 absorb_l!(Γnew[k],Λ[k],Γ[k])
-# 		end
-# 	else
-# 		error("Specify :left or :right in transfer matrix calculation")
-# 	end
-
-# 	#println([(2*(1:oplength) .- 1)..., 2*(1:oplength)...])
-# 	op = reshape(permutedims(op,[(2*(1:oplength) .- 1)..., 2*(1:oplength)...]), *(opsize...))
-# 	s_start = size(Γnew[1],1)
-# 	s_final = size(Γnew[oplength],3)
-
-# 	function T_on_vec(vec)
-# 		v = reshape(vec,1,s_start,s_start)
-# 		for k in 1:oplength
-# 			@tensoropt (1,2) v[:] := conj(Γnew[k][1,-2,-4])* v[-1,1,2]* Γnew[k][2,-3,-5]
-# 			sv = size(v)
-# 			v = reshape(v,*(sv[1:3]...),sv[4],sv[5])
-# 		end
-# 		@tensor v[:] := v[1,-1,-2] * op[1]
-# 		#v = reshape(ncon((v,op),[[1:2*oplength...,-1,-2],1:2*oplength]),s_final^2)
-# 		return reshape(v,s_final^2)
-# 	end
-# 	return LinearMap{ComplexF64}(T_on_vec,s_final^2,s_start^2)
-# end
-
-# function transfer_matrix(Γ::Array{Array{T,3},1}, op::Array{T_op,N_op}, direction = :left) where {T, T_op<:Number, N_op}
-# 	oplength = Int(N_op/2)
-# 	opsize = size(op)
-# 	if direction == :left
-# 		Γnew = copy(reverse(Γ))
-# 		for k = 1:oplength
-# 			 Γnew[oplength+1-k] = permutedims(Γnew[oplength+1-k], [3,2,1])
-# 			 op = permutedims(op,[oplength:-1:1..., 2*oplength:-1:oplength+1...])
-# 			 #Γnew[k] = absorb_l(Γ[k], Λ[mod1(k+1,N)], :right)
-# 		end
-# 	elseif direction == :right
-# 		Γnew = copy(Γ)
-# 	else
-# 		error("Specify :left or :right in transfer matrix calculation")
-# 	end
-
-# 	#println([(2*(1:oplength) .- 1)..., 2*(1:oplength)...])
-# 	op = reshape(permutedims(op,[(2*(1:oplength) .- 1)..., 2*(1:oplength)...]), *(opsize...))
-# 	s_start = size(Γnew[1],1)
-# 	s_final = size(Γnew[oplength],3)
-
-# 	function T_on_vec(vec)
-# 		v = reshape(vec,1,s_start,s_start)
-# 		for k in 1:oplength
-# 			@tensoropt (1,2) v[:] := conj(Γnew[k][1,-2,-4])* v[-1,1,2]* Γnew[k][2,-3,-5]
-# 			sv = size(v)
-# 			v = reshape(v,*(sv[1:3]...),sv[4],sv[5])
-# 		end
-# 		@tensor v[:] := v[1,-1,-2] * op[1]
-# 		#v = reshape(ncon((v,op),[[1:2*oplength...,-1,-2],1:2*oplength]),s_final^2)
-# 		return reshape(v,s_final^2)
-# 	end
-# 	return LinearMap{ComplexF64}(T_on_vec,s_final^2,s_start^2)
-# end
 
 # This function gives the transfer matrix for a single site which acts on the right.
 """

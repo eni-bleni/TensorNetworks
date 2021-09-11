@@ -1,28 +1,11 @@
-
-"""
-	LRcanonical(M, dir)-> A,R,DB
-
-Return the left or right canonical form of a single tensor.
-
-:left is leftcanonical, :right is rightcanonical
-"""
-function LRcanonical(M, dir=:left)
-    if dir == :right
-        M = permutedims(M,[3,2,1])
-    end
-    D1,d,D2 = size(M)
-    M = reshape(M,D1*d,D2)
-    A,R = qr(M) # M = Q R
-	A = Matrix(A)
-	R = Matrix(R)
-    Db = size(R,1) # intermediate bond dimension
-	A = reshape(A,D1,d,Db)
-    if dir == :right
-        A = permutedims(A,[3,2,1])
-        R = transpose(R)
-    end
-    return A,R,Db
+function reverse_direction(dir::Symbol)
+	if dir==:left 
+		return :right
+	elseif dir==:right
+		return :left
+	end
 end
+
 
 """
 	truncate_svd(F, args)
@@ -50,9 +33,9 @@ check whether given site/tensor in mps is left-/rightcanonical
 """
 function check_LRcanonical(a::GenericSite, dir)
     if dir == :left
-        @tensor c[-1,-2] := a.Γ[1,2,-2]*conj(a.Γ[1,2,-1])
+        @tensor c[-1,-2] := data(a)[1,2,-2]*conj(data(a)[1,2,-1])
     elseif dir == :right
-        @tensor c[-1,-2] := a.Γ[-1,2,1]*conj(a.Γ[-2,2,1])
+        @tensor c[-1,-2] := data(a)[-1,2,1]*conj(data(a)[-2,2,1])
     else
         println("ERROR: choose :left for leftcanonical or :right for rightcanonical")
         return false
@@ -65,9 +48,9 @@ end
 
 Split and truncate a two-site tensor
 """
-function split_truncate(theta, args::TruncationArgs)
-	D1l,d,d,D2r = size(theta)
-    theta = reshape(theta, D1l*d,d*D2r)
+function split_truncate!(theta, args::TruncationArgs)
+	#D1l,d,d,D2r = size(theta)
+    #theta = reshape(theta, D1l*d,d*D2r)
 	F = try
         svd!(theta)
     catch y
@@ -78,50 +61,52 @@ function split_truncate(theta, args::TruncationArgs)
 end
 
 
-"""
-	apply_two_site_gate(Γ, Λ, gate, Dmax,tol)
-
-Act with a two site gate and return the truncated decomposition U,S,Vt,err
-"""
-function apply_two_site_gate(Γ, Λ, gate::GenericSquareGate, args::TruncationArgs)
-	ΓL = similar(Γ[1])
-	ΓR = similar(Γ[2])
-	absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
-	absorb_l!(ΓR,Γ[2], Λ[3])
-    @tensoropt (5,-1,-4) theta[:] := ΓL[-1,2,5]*ΓR[5,3,-4]*gate.data[-2,-3,2,3]
+function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::GenericSquareGate, args::TruncationArgs)
+	# ΓL = similar(Γ[1])
+	# ΓR = similar(Γ[2])
+	Λ1 = ΓL.Λ1
+	Λ2 = ΓL.Λ2
+	Λ3 = ΓR.Λ2
+	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
+	ΓL2 = Λ1*ΓL.Γ*Λ2
+	ΓR2 = ΓR.Γ*Λ3
+	# absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
+	# absorb_l!(ΓR,Γ[2], Λ[3])
+    @tensoropt (5,-1,-4) theta[:] := data(ΓL2)[-1,2,5]*data(ΓR2)[5,3,-4]*data(gate)[-2,-3,2,3]
 	DL,d,d,DR = size(theta)
 
-	U,S,Vt,Dm,err = split_truncate(theta, args)
+	U,S,Vt,Dm,err = split_truncate!(reshape(theta, DL*d,d*DR), args)
 
 	U=reshape(U,DL,d,Dm)
 	Vt=reshape(Vt,Dm,d,DR)
-    U = absorb_l(U, 1 ./Λ[1],:left)
-    Vt = absorb_l(Vt,1 ./Λ[3],:right)
-    return U,S,Vt,err
+	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL))
+	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
+    # Us = absorb_l(U, 1 ./Λ1,:left)
+    # Vts = absorb_l(Vt,1 ./Λ3,:right)
+	ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
+	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
+    return ΓLout, ΓRout, err
 end
 
-"""
-	apply_two_site_identity(Γ, Λ, Dmax,tol)
-
-Act with a two site identity gate and return the truncated decomposition U,S,Vt,err
-"""
-function apply_two_site_identity(Γ, Λ, args::TruncationArgs)
-	ΓL = similar(Γ[1])
-	ΓR = similar(Γ[2])
-	absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
-	absorb_l!(ΓR, Γ[2], Λ[3])
-
-    @tensor theta[:] := ΓL[-1,-2,5]*ΓR[5,-3,-4]
+function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::ScaledIdentityGate, args::TruncationArgs)
+	Λ1 = ΓL.Λ1
+	Λ2 = ΓL.Λ2
+	Λ3 = ΓR.Λ2
+	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
+	ΓL2 = Λ1*ΓL.Γ*Λ2
+	ΓR2 = ΓR.Γ*Λ3
+    @tensor theta[:] := data(gate)*data(ΓL2)[-1,-2,1]*data(ΓR2)[1,-3,-4]
 	DL,d,d,DR = size(theta)
-
-	U,S,Vt,Dm,err = split_truncate(theta,args)
+	U,S,Vt,Dm,err = split_truncate!(reshape(theta,DL*d,d*DR), args)
 	U=reshape(U,DL,d,Dm)
 	Vt=reshape(Vt,Dm,d,DR)
-    U = absorb_l(U, 1 ./Λ[1],:left)
-    Vt = absorb_l(Vt,1 ./Λ[3],:right)
-
-    return U,S,Vt,err
+	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL)) 
+	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
+    ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
+	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
+    return ΓLout, ΓRout, err
 end
+
 """
 	absorb_l!
 
@@ -165,40 +150,28 @@ function deauxillerate_onesite(tens)
     return reshape(tens,s[1],d,d,s[3])
 end
 
-# """
-# 	block_to_gate
 
-# Return the 4 legged version of the matrix
-# """
-# function block_to_gate(block)
-#     d = Int(sqrt(size(block,1)))
-#     return reshape(block,d,d,d,d)
-# end
-
-# function matrix_to_gate(matrix, n)
-#     d = Int((size(matrix,1))^(1/n))
-#     return reshape(matrix, repeat([d],n)...)
-# end
-# function gate_to_matrix(gate, n)
-# 	dims = size(gate)
-# 	op_length = operator_length(gate)
-#     return reshape(gate, *(dims[1:op_length]...), *(dims[op_length+1:end]...))
-# end
-
-
+function isleftcanonical(data)
+	@tensor id[:] := conj(data[1,2,-1])*data[1,2,-2]
+	return id ≈ one(id)
+end 
+function isrightcanonical(data)
+	@tensor id[:] := conj(data[-1,2,1])*data[-2,2,1]
+	return id ≈ one(id)
+end 
 # %% Expectation values
-function expectation_value_two_site(Γ,Λ,op)
-    thetaL = absorb_l(Γ[1],Λ[1],:left)
-    thetaL = absorb_l(thetaL,Λ[2],:right)
-    thetaR = absorb_l(Γ[2],Λ[3],:right)
-    @tensoropt (d,u,r,l) r[:] := thetaL[l,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[l,clu,u]) *conj(thetaR[u,cru,r]) *thetaR[d,crd,r]
-    return r[1]
-end
+# function expectation_value_two_site(Γ::Array{T,3},Λ,op) where {T}
+#     thetaL = absorb_l(Γ[1],Λ[1],:left)
+#     thetaL = absorb_l(thetaL,Λ[2],:right)
+#     thetaR = absorb_l(Γ[2],Λ[3],:right)
+#     @tensoropt (d,u,r,l) r[:] := thetaL[l,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[l,clu,u]) *conj(thetaR[u,cru,r]) *thetaR[d,crd,r]
+#     return r[1]::T
+# end
 
-function expectation_value_two_site(Γ,op)
-    @tensoropt (d,u,r,l) r[:] := thetaL[l,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[l,clu,u]) *conj(thetaR[u,cru,r]) *thetaR[d,crd,r]
-    return r[1]
-end
+# function expectation_value_two_site(Γ,op)
+#     @tensoropt (d,u,r,l) r[:] := thetaL[l,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[l,clu,u]) *conj(thetaR[u,cru,r]) *thetaR[d,crd,r]
+#     return r[1]
+# end
 
 """
 	local_ham_eigs(hamiltonian, size, nev=2)
