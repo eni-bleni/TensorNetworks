@@ -3,7 +3,7 @@ function CentralUMPS(mps::UMPS) where {T}
     n = length(mps)
     ΓL = [GenericSite(mps[k],:left) for k in 1:n]
     ΓR = [GenericSite(mps[k],:right) for k in 1:n]
-    CentralUMPS(ΓL,ΓR,mps.Λ[1],mps.purification,mps.truncation,mps.error)
+    CentralUMPS(ΓL,ΓR,mps.Λ[1],ispurification(mps),mps.truncation,mps.error)
 end
 
 function transfer_matrix(mps::CentralUMPS; half=:left)

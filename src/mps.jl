@@ -20,7 +20,7 @@ function get_thermal_states(mps::AbstractMPS, hamGates, βs, dβ; order=2)
 	mps = identityMPS(mps)
 	canonicalize!(mps)
 	mpss = Array{typeof(mps),1}(undef,Nβ)
-	layers = prepare_layers(mps, hamGates,-dβ*1im/2, order)
+	layers = prepare_layers(mps, hamGates,dβ*1im/2, order)
 	β=0
 	βout = Float64[]
 	for n in 1:Nβ

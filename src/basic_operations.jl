@@ -61,51 +61,51 @@ function split_truncate!(theta, args::TruncationArgs)
 end
 
 
-function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::GenericSquareGate, args::TruncationArgs)
-	# ΓL = similar(Γ[1])
-	# ΓR = similar(Γ[2])
-	Λ1 = ΓL.Λ1
-	Λ2 = ΓL.Λ2
-	Λ3 = ΓR.Λ2
-	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
-	ΓL2 = Λ1*ΓL.Γ*Λ2
-	ΓR2 = ΓR.Γ*Λ3
-	# absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
-	# absorb_l!(ΓR,Γ[2], Λ[3])
-    @tensoropt (5,-1,-4) theta[:] := data(ΓL2)[-1,2,5]*data(ΓR2)[5,3,-4]*data(gate)[-2,-3,2,3]
-	DL,d,d,DR = size(theta)
+# function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::GenericSquareGate, args::TruncationArgs)
+# 	# ΓL = similar(Γ[1])
+# 	# ΓR = similar(Γ[2])
+# 	Λ1 = ΓL.Λ1
+# 	Λ2 = ΓL.Λ2
+# 	Λ3 = ΓR.Λ2
+# 	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
+# 	ΓL2 = Λ1*ΓL.Γ*Λ2
+# 	ΓR2 = ΓR.Γ*Λ3
+# 	# absorb_l!(ΓL, Λ[1], Γ[1], Λ[2])
+# 	# absorb_l!(ΓR,Γ[2], Λ[3])
+#     @tensoropt (5,-1,-4) theta[:] := data(ΓL2)[-1,2,5]*data(ΓR2)[5,3,-4]*data(gate)[-2,-3,2,3]
+# 	DL,d,d,DR = size(theta)
 
-	U,S,Vt,Dm,err = split_truncate!(reshape(theta, DL*d,d*DR), args)
+# 	U,S,Vt,Dm,err = split_truncate!(reshape(theta, DL*d,d*DR), args)
 
-	U=reshape(U,DL,d,Dm)
-	Vt=reshape(Vt,Dm,d,DR)
-	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL))
-	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
-    # Us = absorb_l(U, 1 ./Λ1,:left)
-    # Vts = absorb_l(Vt,1 ./Λ3,:right)
-	ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
-	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
-    return ΓLout, ΓRout, err
-end
+# 	U=reshape(U,DL,d,Dm)
+# 	Vt=reshape(Vt,Dm,d,DR)
+# 	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL))
+# 	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
+#     # Us = absorb_l(U, 1 ./Λ1,:left)
+#     # Vts = absorb_l(Vt,1 ./Λ3,:right)
+# 	ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
+# 	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
+#     return ΓLout, ΓRout, err
+# end
 
-function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::ScaledIdentityGate, args::TruncationArgs)
-	Λ1 = ΓL.Λ1
-	Λ2 = ΓL.Λ2
-	Λ3 = ΓR.Λ2
-	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
-	ΓL2 = Λ1*ΓL.Γ*Λ2
-	ΓR2 = ΓR.Γ*Λ3
-    @tensor theta[:] := data(gate)*data(ΓL2)[-1,-2,1]*data(ΓR2)[1,-3,-4]
-	DL,d,d,DR = size(theta)
-	U,S,Vt,Dm,err = split_truncate!(reshape(theta,DL*d,d*DR), args)
-	U=reshape(U,DL,d,Dm)
-	Vt=reshape(Vt,Dm,d,DR)
-	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL)) 
-	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
-    ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
-	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
-    return ΓLout, ΓRout, err
-end
+# function apply_two_site_gate(ΓL::OrthogonalLinkSite, ΓR::OrthogonalLinkSite, gate::ScaledIdentityGate, args::TruncationArgs)
+# 	Λ1 = ΓL.Λ1
+# 	Λ2 = ΓL.Λ2
+# 	Λ3 = ΓR.Λ2
+# 	@assert Λ2 ≈ ΓR.Λ1 "Error in apply_two_site_gate: sites do not share link"
+# 	ΓL2 = Λ1*ΓL.Γ*Λ2
+# 	ΓR2 = ΓR.Γ*Λ3
+#     @tensor theta[:] := data(gate)*data(ΓL2)[-1,-2,1]*data(ΓR2)[1,-3,-4]
+# 	DL,d,d,DR = size(theta)
+# 	U,S,Vt,Dm,err = split_truncate!(reshape(theta,DL*d,d*DR), args)
+# 	U=reshape(U,DL,d,Dm)
+# 	Vt=reshape(Vt,Dm,d,DR)
+# 	Uout = inv(Λ1)*GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(ΓL)) 
+# 	Vtout = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(ΓR)) *inv(Λ3)
+#     ΓLout = OrthogonalLinkSite(Uout, Λ1, LinkSite(S))
+# 	ΓRout = OrthogonalLinkSite(Vtout, LinkSite(S), Λ3)
+#     return ΓLout, ΓRout, err
+# end
 
 """
 	absorb_l!

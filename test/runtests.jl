@@ -8,6 +8,33 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     @test ishermitian(Gate(H))
     @test isunitary(op) == isunitary(Gate(op))
     @test isunitary(Gate(U))
+
+    d = 4;
+    mat = rand(ComplexF64,d,d);
+    gate = Gate(mat);
+    @test data(gate) ≈ mat
+    @test data(gate') ≈ mat'
+    @test data(gate*gate) ≈ mat*mat
+
+    tens = rand(ComplexF64,2,2,2,2);
+    gate = Gate(tens);
+    @test data(gate) ≈ tens
+    @tensor tensc[:] := conj(tens[-3,-4,-1,-2]);
+    @test data(gate') ≈ tensc
+    @tensor t2[:] := tens[-1,-2,1,2]*tens[1,2,-3,-4];
+    @test data(gate*gate) ≈ t2
+
+    mat = rand(ComplexF64,d,d);
+    mataux = kron(Matrix{ComplexF64}(I,d,d),mat);
+    gate = Gate(mat);
+    gateaux = TensorNetworks.auxillerate(gate);
+    @test data(gateaux) ≈ mataux
+
+    @tensor tens[:] := mat[-1,-3]*mat[-2,-4];
+    @tensor tensaux[:] := mataux[-1,-3] *mataux[-2,-4];
+    gateaux = TensorNetworks.auxillerate(Gate(tens));
+    @test data(gateaux) ≈ tensaux
+
 end
 
 @testset "Canonicalize" begin
@@ -89,6 +116,65 @@ end
     mps3 = LCROpenMPS(mps2)
     @test scalar_product(mps2,mps3) ≈ 1
     @test scalar_product(mps,mps3) ≈ 1
+end
+
+@testset "Transfer" begin
+    
+    
+end
+
+@testset "Compression" begin
+    mps = canonicalize(randomOpenMPS(7,2,5));
+    ΓL = mps[3];
+    ΓR = mps[4];
+    ΓL2, ΓR2, err = compress(ΓL, ΓR, mps.truncation);
+    T = transfer_matrix(ΓL,:left) * transfer_matrix(ΓR,:left)
+    T2 =transfer_matrix(ΓL2,:left) * transfer_matrix(ΓR2,:left)
+    @test ΓL.Λ1 ≈ ΓL2.Λ1 && ΓL.Λ2 ≈ ΓL2.Λ2 && ΓR.Λ2 ≈ ΓR2.Λ2 && Matrix(T2) ≈ Matrix(T)
+
+    thetaL,thetaR,phiL,phiR = 2*pi*rand(4);
+    ΓL = qubit(thetaL,phiL);
+    ΓR = qubit(thetaR,phiR);
+    @test norm(ΓL) ≈ norm(ΓR) ≈ 1
+
+    gL = exp(1im*rand(4)'*[si, sx, sy, sz]);
+    gR = exp(1im*rand(4)'*[si, sx, sy, sz]);
+    L = gL*vec(data(ΓL));
+    R = gR*vec(data(ΓR));
+
+    g = Gate(TensorNetworks.gate(kron(gR,gL),2));
+    ΓL, S, ΓR, err = apply_two_site_gate(ΓL,ΓR,g, mps.truncation);
+    @test err < 1e-16
+    @test data(S) ≈ [1]
+    #@test vec(data(ΓL)) ≈ L && vec(data(ΓR)) ≈ R
+    @tensor ΓLR[:] := data(ΓL)[-1,-2,1] * data(ΓR)[1,-3,-4];
+    @tensor LR[:] := reshape(L,1,2,1)[-1,-2,1] * reshape(R,1,2,1)[1,-3,-4];
+    @test ΓLR ≈ LR
+
+end
+
+
+@testset "TEBD" begin
+    d=4
+    mat = rand(ComplexF64,d,d)
+    g = Gate(mat)
+    expmat = exp(1im*mat)
+    id = one(mat)
+
+    layers = TensorNetworks.st1gates(0,[g]);
+    [@test data(l[1]) ≈ id for l in layers]
+    layers = TensorNetworks.st1gates(1,[g]);
+    @test data(layers[1][1]) ≈ expmat
+
+    layers = TensorNetworks.st2gates(0,[g]);
+    [@test data(l[1]) ≈ id for l in layers]
+    layers = TensorNetworks.st2gates(1,[g]);
+    @test data(*([l[1] for l in layers[1:2:end]]...)) ≈ expmat
+
+    layers = TensorNetworks.frgates(0,[g]);
+    [@test data(l[1]) ≈ id for l in layers]
+    layers = TensorNetworks.frgates(1,[g]);
+    @test data(*([l[1] for l in layers[1:2:end]]...)) ≈ expmat
 end
 
 @testset "Imaginary TEBD" begin

@@ -22,13 +22,13 @@ export transfer_matrix, transfer_matrices, transfer_matrix_squared, transfer_mat
 export prepare_layers, norm, apply_layers, apply_layers!
 export DMRG, eigenstates
 export isingHamBlocks, isingHamGates, IdentityMPO, IsingMPO, HeisenbergMPO
-export get_thermal_states, TEBD!, apply_layers_nonunitary,apply_layer_nonunitary!
+export get_thermal_states, TEBD!, apply_layers_nonunitary,apply_layer_nonunitary!, apply_two_site_gate
 export sx, sy,sz,si,s0,ZZ,ZI,IZ,XI,IX,XY,YX,II
 export OrthogonalLinkSite, GenericSite, VirtualSite, LinkSite
 export GenericSquareGate, AbstractSquareGate, AbstractGate, Gate
 export isleftcanonical, isrightcanonical, data, isunitary
 export scalar_product, set_center, set_center!, entanglement_entropy
-export entanglement_entropy, IdentityGate
+export entanglement_entropy, IdentityGate, data, compress, qubit
 
 include("types.jl")
 include("pauli.jl")
@@ -47,6 +47,6 @@ include("coarsegraining.jl")
 include("tebd.jl")
 include("transfer.jl")
 include("dmrg.jl")
-#include("quasiparticle.jl")
-#include("precompile.jl")
+include("states.jl")
+
 end # module

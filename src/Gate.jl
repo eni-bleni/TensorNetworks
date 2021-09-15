@@ -5,7 +5,7 @@ operator_length(op::AbstractGate) = length(op)
 Base.length(::AbstractSquareGate{T,N}) where {T,N} = Int(N/2)
 LinearAlgebra.ishermitian(gate::GenericSquareGate) = gate.ishermitian
 isunitary(gate::GenericSquareGate) = gate.isunitary
-isunitary(mat::Matrix{<:Number}) = mat'*mat ≈ one(mat) && mat*mat' ≈ one(mat)
+isunitary(mat::AbstractArray{<:Number,2}) = mat'*mat ≈ one(mat) && mat*mat' ≈ one(mat)
 Base.complex(::Type{<:GenericSquareGate{T,N}}) where {T,N} = GenericSquareGate{complex(T),N}
 # Base.complex(::Type{<:HermitianGate{T,N}}) where {T,N} = HermitianGate{complex(T),N}
 
@@ -17,11 +17,18 @@ Base.:*(g::ScaledIdentityGate, x::K) where {K<:Number} = ScaledIdentityGate(x*da
 Base.:*(x::K, g::GenericSquareGate) where {K<:Number} = GenericSquareGate(x*data(g))
 Base.:*(g::GenericSquareGate, x::K) where {K<:Number} = GenericSquareGate(x*data(g))
 
+function Base.:*(g1::GenericSquareGate{T,N},g2::GenericSquareGate{K,N}) where {T,K,N}
+	Gate(gate(Matrix(g1)*Matrix(g2), Int(N/2)))
+end
+
 Base.:+(g1::GenericSquareGate, g2::GenericSquareGate) = GenericSquareGate(data(g1)+ data(g2))
 Base.:+(g1::ScaledIdentityGate, g2::ScaledIdentityGate) = ScaledIdentityGate(data(g1)+ data(g2))
 
 Base.exp(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(exp(Matrix(g)), Int(N/2)))
 Base.exp(g::ScaledIdentityGate) = ScaledIdentityGate(exp(data(g)))
+
+
+Base.adjoint(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(Matrix(g)', Int(N/2)))
 
 Base.adjoint(g::ScaledIdentityGate) = ScaledIdentityGate(data(g)')
 Base.transpose(g::ScaledIdentityGate) = g

@@ -160,7 +160,7 @@ function frgates(dt,gates::Vector{<:AbstractSquareGate})
    theta = 1/(2-2^(1/3))
    W = Vector{Vector{AbstractSquareGate}}(undef,7)
    times = [theta/2 theta (1-theta)/2 (1-2*theta)]
-   exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
+   exponentiate(t) = [exp(t*1im*dt*g) for g in gates]
    W[1:4] = exponentiate.(times)
    # W[1] = map(x->exp(-theta*1im/2*dt*x),blocks)
    # W[2] = map(x->exp(-theta*1im*dt*x),blocks)
@@ -177,10 +177,10 @@ end
 
 Return the layers of a 2:nd order Trotter scheme
 """
-function st2gates(dt,gates::Vector{<:AbstractSquareGate}) where {T,N}
+function st2gates(dt,gates::Vector{<:AbstractSquareGate})
    W =  Vector{Vector{AbstractSquareGate}}(undef,3)
    times = [1/2 1]
-   exponentiate(t) = (map(x->exp(-t*1im*dt*x),gates))
+   exponentiate(t) = [exp(t*1im*dt*g) for g in gates]
    W[1:2] = exponentiate.(times)
    W[3] = W[1]
    return W
@@ -191,9 +191,9 @@ end
 
 Return the layers of a 1:st order Trotter scheme
 """
-function st1gates(dt,gates::Vector{<:AbstractSquareGate}) where {T,N}
+function st1gates(dt,gates::Vector{<:AbstractSquareGate})
    W = Vector{Vector{AbstractSquareGate}}(undef,2)
-   W[1] = map(x->exp(-1im*dt*x),gates)
+   W[1] = [exp(1im*dt*g) for g in gates]
    W[2] = W[1]
    return W
 end

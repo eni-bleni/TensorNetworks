@@ -13,7 +13,7 @@ Base.size(site::VirtualSite) = size(site.Λ)
 Base.length(site::LinkSite) = length(site.Λ)
 
 Base.isapprox(s1::AbstractSite,s2::AbstractSite) = isapprox(data(s1),data(s2))
-
+Base.isapprox(s1::OrthogonalLinkSite, s2::OrthogonalLinkSite) = isapprox(s1.Γ, s2.Γ) && isapprox(s1.Λ1, s2.Λ1) && isapprox(s1.Λ2, s2.Λ2)
 ispurification(site::GenericSite) = site.purification
 ispurification(site::OrthogonalLinkSite) = ispurification(site.Γ)
 
@@ -127,33 +127,56 @@ end
 Base.inv(G::VirtualSite) = VirtualSite(inv(G.Λ))
 Base.inv(Λ::LinkSite) = LinkSite(1 ./ Λ.Λ)
 
+function Base.:*(gate::GenericSquareGate, Γ::Tuple{GenericSite, GenericSite})
+	L, R = data.(Γ)
+	g = data(gate)
+	@tensoropt (5,-1,-4) theta[:] := L[-1,2,5]*R[5,3,-4]*g[-2,-3,2,3]
+end
+function Base.:*(gate::ScaledIdentityGate, Γ::Tuple{GenericSite, GenericSite})
+	@tensor theta[:] := data(gate)*data(Γ[1])[-1,-2,1]*data(Γ[2])[1,-3,-4]
+end	
+
+# function Base.:*(gate::AbstractSquareGate, Γ::Tuple{OrthogonalLinkSite, OrthogonalLinkSite})
+# 	@assert Γ[1].Λ2 == Γ[2].Λ1 "Error in applying two site gate: The sites do not share a link"
+# 	ΓL = LeftOrthogonalSite(Γ1)
+# 	ΓR = Γ2.Λ1*RightOrthogonalSite(Γ2)
+# 	gate*(ΓL,ΓR)
+# end
+
+OrthogonalLinkSite(Γ::GenericSite, Λ1::LinkSite, Λ2::LinkSite; check=false) = OrthogonalLinkSite(Λ1, Γ, Λ2, check=check)
+
 """
-	svd(Γ1::GenericSite, Γ2::GenericSite, args::TruncationArgs)
+	compress(Γ1::GenericSite, Γ2::GenericSite, args::TruncationArgs)
 
 Contract and compress the two sites using the svd. Return two U,S,V,err where U is a LeftOrthogonalSite, S is a LinkSite and V is a RightOrthogonalSite
 """
-function compress(Γ1::GenericSite, Γ2::GenericSite, args::TruncationArgs)
-    @tensor theta[:] := data(Γ1)[-1,-2,5]*data(Γ2)[5,-3,-4]
-	DL,d,d,DR = size(theta)
+compress(Γ1::AbstractSite, Γ2::AbstractSite,args::TruncationArgs) = apply_two_site_gate(Γ1,Γ2,IdentityGate,args)
 
-	U,S,Vt,Dm,err = split_truncate(theta,args)
-	U2 = GenericSite(reshape(U,DL,d,Dm), ispurification(Γ1))
-	Vt2 = GenericSite(reshape(Vt,Dm,d,DR), ispurification(Γ2))
+"""
+	apply_two_site_gate(Γ1::GenericSite, Γ2::GenericSite, gate, args::TruncationArgs)
+
+Contract and compress the two sites using the svd. Return two U,S,V,err where U is a LeftOrthogonalSite, S is a LinkSite and V is a RightOrthogonalSite
+"""
+function apply_two_site_gate(Γ1::GenericSite, Γ2::GenericSite, gate, args::TruncationArgs)
+	theta = gate*(Γ1,Γ2)
+	DL,d,d,DR = size(theta)
+	U,S,Vt,Dm,err = split_truncate!(reshape(theta,DL*d,d*DR),args)
+	U2 = GenericSite(Array(reshape(U,DL,d,Dm)), ispurification(Γ1))
+	Vt2 = GenericSite(Array(reshape(Vt,Dm,d,DR)), ispurification(Γ2))
 	S2 = LinkSite(S)
     return U2, S2, Vt2, err
 end
 
-function compress(Γ1::OrthogonalLinkSite, Γ2::OrthogonalLinkSite, args::TruncationArgs)
-    @assert Γ1.Λ2 == Γ2.Λ1 "Svd error: The sites do not share a link"
+function apply_two_site_gate(Γ1::OrthogonalLinkSite, Γ2::OrthogonalLinkSite, gate, args::TruncationArgs)
+	@assert Γ1.Λ2 ≈ Γ2.Λ1 "Error in apply_two_site_gate: The sites do not share a link"
 	ΓL = LeftOrthogonalSite(Γ1)
 	ΓR = Γ2.Λ1*RightOrthogonalSite(Γ2)
-	
-	U,S,Vt,err = compress(ΓL, ΓR, args)
 
+	U,S,Vt,err = apply_two_site_gate(ΓL, ΓR, gate, args)
 	U2 = inv(Γ1.Λ1)*U
     Vt2 = Vt*inv(Γ2.Λ2)
-	Γ1new = OrthogonalLinkSite(Γ1.Λ1,U2,S)
-	Γ2new = OrthogonalLinkSite(S,Vt2,Γ2.Λ2)
+	Γ1new = OrthogonalLinkSite(Γ1.Λ1, U2, S)
+	Γ2new = OrthogonalLinkSite(S, Vt2, Γ2.Λ2)
     return Γ1new, Γ2new, err
 end
 
@@ -179,16 +202,6 @@ function to_left_right_orthogonal(M::Vector{GenericSite{T}}; center=1, method=:q
 	else
 		Γ[center] = M[center]/norm(M[center])
 	end
-    # if center>1 && center < N+1
-    #     out[center-1], S, out[center], err = compress(out[center-1]*G, out[center], mps.truncation)
-    # else
-	# 	err=0.0
-    #     if !(G.Λ ≈ ones(T,1,1)) 
-	# 		@warn "In to_orthogonal!: remainder is not 1 at the end of the chain. $G"
-	# 	end
-    #     S = LinkSite([one(T)])
-    # end
-
     return Γ
 end
 function to_right_orthogonal(M::Vector{GenericSite{T}}; method=:qr) where {T}
@@ -202,9 +215,6 @@ function to_right_orthogonal(M::Vector{GenericSite{T}}; method=:qr) where {T}
 			M2[i-1] = M2[i-1]*G
 		end
     end
-	# if !(G.Λ ≈ ones(T,1,1)) 
-	# 	@warn "In to_right_orthogonal: remainder is not 1 at the end of the chain. $G"
-	# end
     return out, G
 end
 

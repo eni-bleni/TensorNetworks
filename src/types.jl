@@ -76,7 +76,7 @@ struct OrthogonalLinkSite{T<:Number} <: AbstractOrthogonalSite
     Γ::GenericSite{T}
     Λ1::LinkSite{T}
     Λ2::LinkSite{T}
-    function OrthogonalLinkSite(Γ::GenericSite{T}, Λ1::LinkSite, Λ2::LinkSite; check=false) where {T}
+    function OrthogonalLinkSite(Λ1::LinkSite, Γ::GenericSite{T}, Λ2::LinkSite; check=false) where {T}
         if check
             @assert isleftcanonical(Λ1 * Γ) "Error in constructing OrthogonalLinkSite: Is not left canonical"
             @assert isrightcanonical(Γ * Λ2) "Error in constructing OrthogonalLinkSite: Is not right canonical"
