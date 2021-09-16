@@ -116,7 +116,7 @@ function transfer_left(Γ::Array{T,3}) where {T}
     end
 	function func_adjoint(Lvec)
 		Ltens = reshape(Lvec,dims[1],dims[1])
-		@tensoropt (t1,b1,-1,-2) temp[:] := Ltens[b1,t1]*conj(Γ[b1, c1, -1])*Γ[t1, c1, -2]
+		@tensoropt (t1,b1,-1,-2) temp[:] := Ltens[t1,b1]*Γ[t1, c1, -1]*conj(Γ[b1, c1, -2])
 		return vec(temp)
 	end
     return LinearMap{T}(func,func_adjoint, dims[1]^2,dims[3]^2)
@@ -164,7 +164,7 @@ function transfer_left(Γ::Array{T,3}, mpo::MPOsite) where {T<:Number}
     end
 	function func_adjoint(Lvec)
 		Ltens = reshape(Lvec,dims[1],smpo[1],dims[1])
-		@tensoropt (bl,tl,-1,-2,-3) temp[:] := Ltens[bl,cl,tl]*conj(Γ[tl, u, -3])*mpo.data[cl,u,d,-2]*Γ[bl, d, -1]
+		@tensoropt (bl,tl,-1,-2,-3) temp[:] := Ltens[tl,cl,bl]*Γ[tl, u, -1]*conj(mpo.data[cl,u,d,-2])*conj(Γ[bl, d, -3])
 		return vec(temp)
 	end
     return LinearMap{T}(func,func_adjoint, smpo[1]*dims[1]^2,smpo[4]*dims[3]^2)

@@ -29,6 +29,7 @@ export GenericSquareGate, AbstractSquareGate, AbstractGate, Gate
 export isleftcanonical, isrightcanonical, data, isunitary
 export scalar_product, set_center, set_center!, entanglement_entropy
 export entanglement_entropy, IdentityGate, data, compress, qubit
+export randomRightOrthogonalSite, randomLeftOrthogonalSite, randomOrthogonalLinkSite, randomGenericSite
 
 include("types.jl")
 include("pauli.jl")

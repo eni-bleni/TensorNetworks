@@ -119,8 +119,42 @@ end
 end
 
 @testset "Transfer" begin
+    D = 10;
+    d = 2;
+    site = randomGenericSite(D,d,D);
+    R = randomRightOrthogonalSite(D,d,D);
+    L = randomLeftOrthogonalSite(D,d,D);
+    LR = randomOrthogonalLinkSite(D,d,D);
+    id = Matrix{ComplexF64}(I,D,D);
+    idvec = vec(id);
+    T = transfer_matrix(site,:left)
+    @test size(T) == (D^2,D^2)
+    @test Matrix(T') ≈ Matrix(T)'
+    @test transpose(Matrix(T)) ≈ Matrix(transfer_matrix(site,:right))
+
+    @test idvec ≈ transfer_matrix(R)*idvec
+    @test idvec ≈ transfer_matrix(L,:right)*idvec
+    @test idvec ≈ transfer_matrix(LR,:right)*idvec
+    @test idvec ≈ transfer_matrix(LR,:left)*idvec
     
-    
+    T1 = transfer_matrix(site,sz);
+    @test size(T1) == (D^2,D^2)
+    @test Matrix(T1') ≈ Matrix(T1)'
+
+    g2 = Gate(TensorNetworks.gate(kron(sz,sz),2));
+    T2 = transfer_matrix([site,site], g2);
+    @test Matrix(T2) ≈ Matrix(T1*T1)
+    @test transpose(Matrix(T2)) ≈ Matrix(transfer_matrix([site,site], g2,:right))
+
+    g3 = Gate(TensorNetworks.gate(kron(sz,sz,sz),3));
+    T3 = transfer_matrix([site,site,site], g3);
+    @test Matrix(T3) ≈ Matrix(T1*T1*T1)
+    @test transpose(Matrix(T3)) ≈ Matrix(transfer_matrix([site,site,site], g3,:right))
+
+    g4 = Gate(TensorNetworks.gate(kron(sz,sz,sz,sz),4));
+    T4 = transfer_matrix([site,site,site,site], g4);
+    @test Matrix(T4) ≈ Matrix(T1*T1*T1*T1)
+    @test transpose(Matrix(T4)) ≈ Matrix(transfer_matrix([site,site,site,site], g4,:right))
 end
 
 @testset "Compression" begin

@@ -273,6 +273,8 @@ function transfer_matrix(site::GenericSite, direction=:left)
 	return T
 end
 
+transfer_matrix(site::GenericSite, op::Array{<:Number,2}, direction=:left) = transfer_matrix(site,MPOsite(op), direction)
+
 function transfer_matrix(site::GenericSite, mpo::MPOsite, direction=:left)
     if ispurification(site)
 		mpo = auxillerate(mpo)

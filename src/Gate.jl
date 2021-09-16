@@ -137,8 +137,10 @@ end
 function transfer_right(Γ::Vector{<:GenericSite}, gate::GenericSquareGate{T_op,N_op}) where {T_op, N_op}
 	op = gate.data
     oplength = Int(N_op/2)
-	opsize = size(gate)
-	opvec = reshape(permutedims(op,[(2*(1:oplength) .- 1)..., 2*(1:oplength)...]), *(opsize...))
+	@assert length(Γ) == oplength "Error in transfer_right: number of sites does not match gate length"
+	@assert size(gate,1) == size(Γ[1],2) "Error in transfer right: physical dimension of gate and site do not match"
+	perm = [Int(floor((k+1)/2))+ oplength*iseven(k) for k in 1:2*oplength]
+	opvec = vec(permutedims(op,perm))
 	s_start = size(Γ[1])[1]
 	s_final = size(Γ[oplength])[3]
 	function T_on_vec(invec)
@@ -149,45 +151,10 @@ function transfer_right(Γ::Vector{<:GenericSite}, gate::GenericSquareGate{T_op,
 			v = reshape(v,*(sv[1:3]...),sv[4],sv[5])
 		end
 		@tensor v[:] := v[1,-1,-2] * opvec[1]
-		#v = reshape(ncon((v,op),[[1:2*oplength...,-1,-2],1:2*oplength]),s_final^2)
 		return vec(v)
 	end
 	return LinearMap{ComplexF64}(T_on_vec,s_final^2,s_start^2)
 end
-# function transfer_matrix(Γ::Vector{GenericSite{T}}, gate::AbstractGate{T_op,N_op}, direction = :left) where {T, T_op, N_op}
-# 	op = gate.data
-#     oplength = Int(N_op/2)
-# 	opsize = size(op)
-# 	if direction == :left
-# 		Γnew = copy(reverse(Γ))
-# 		for k = 1:oplength
-# 			 Γnew[oplength+1-k] = permutedims(Γnew[oplength+1-k], [3,2,1])
-# 			 op = permutedims(op,[oplength:-1:1..., 2*oplength:-1:oplength+1...])
-# 		end
-# 	elseif direction == :right
-# 		Γnew = copy(Γ)
-# 	else
-# 		error("Specify :left or :right in transfer matrix calculation")
-# 	end
-
-# 	#println([(2*(1:oplength) .- 1)..., 2*(1:oplength)...])
-# 	op = reshape(permutedims(op,[(2*(1:oplength) .- 1)..., 2*(1:oplength)...]), *(opsize...))
-# 	s_start::Integer = size(Γnew[1])[1]
-# 	s_final::Integer = size(Γnew[oplength])[3]
-
-# 	function T_on_vec(vec)
-# 		v = reshape(vec,1,s_start,s_start)
-# 		for k in 1:oplength
-# 			@tensoropt (1,2) v[:] := conj(Γnew[k].Γ[1,-2,-4])* v[-1,1,2]* Γnew[k].Γ[2,-3,-5]
-# 			sv = size(v)
-# 			v = reshape(v,*(sv[1:3]...),sv[4],sv[5])
-# 		end
-# 		@tensor v[:] := v[1,-1,-2] * op[1]
-# 		#v = reshape(ncon((v,op),[[1:2*oplength...,-1,-2],1:2*oplength]),s_final^2)
-# 		return reshape(v,s_final^2)
-# 	end
-# 	return LinearMap{ComplexF64}(T_on_vec,s_final^2,s_start^2)
-# end
 
 """
     expectation_value(mps::AbstractMPS, op::AbstractGate, site::Integer)
