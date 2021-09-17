@@ -16,6 +16,8 @@ Base.:*(x::K, g::ScaledIdentityGate) where {K<:Number} = ScaledIdentityGate(x*da
 Base.:*(g::ScaledIdentityGate, x::K) where {K<:Number} = ScaledIdentityGate(x*data(g))
 Base.:*(x::K, g::GenericSquareGate) where {K<:Number} = GenericSquareGate(x*data(g))
 Base.:*(g::GenericSquareGate, x::K) where {K<:Number} = GenericSquareGate(x*data(g))
+Base.:/(g::GenericSquareGate, x::K) where {K<:Number} = inv(x)*g
+Base.:/(g::ScaledIdentityGate, x::K) where {K<:Number} = inv(x)*g
 
 function Base.:*(g1::GenericSquareGate{T,N},g2::GenericSquareGate{K,N}) where {T,K,N}
 	Gate(gate(Matrix(g1)*Matrix(g2), Int(N/2)))
@@ -23,6 +25,8 @@ end
 
 Base.:+(g1::GenericSquareGate, g2::GenericSquareGate) = GenericSquareGate(data(g1)+ data(g2))
 Base.:+(g1::ScaledIdentityGate, g2::ScaledIdentityGate) = ScaledIdentityGate(data(g1)+ data(g2))
+Base.:+(g1::ScaledIdentityGate, g2::GenericSquareGate) = data(g1)*one(data(g2))+ data(g2)
+Base.:+(g1::GenericSquareGate, g2::ScaledIdentityGate) = data(g2)*one(data(g1))+ data(g1)
 
 Base.exp(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(exp(Matrix(g)), Int(N/2)))
 Base.exp(g::ScaledIdentityGate) = ScaledIdentityGate(exp(data(g)))
@@ -114,7 +118,7 @@ function transfer_matrix(sites::Vector{<:OrthogonalLinkSite}, op::AbstractGate, 
 	transfer_matrix(sites, op, direction)
 end
 
-transfer_matrix(Γ::Vector{<:GenericSite}, g::ScaledIdentityGate, direction = :left) = data(g)*transfer_matrix(Γ,direction)
+transfer_matrix(Γ::GenericSite, g::ScaledIdentityGate, direction::Symbol = :left) = data(g)*transfer_matrix(Γ,direction)
 
 function transfer_matrix(Γ::Vector{<:GenericSite}, gate::AbstractSquareGate{T_op,N_op}, direction = :left) where {T_op, N_op}
     #op = gate.data

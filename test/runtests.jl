@@ -1,13 +1,57 @@
 using Test, TensorNetworks, TensorOperations, LinearAlgebra
 
 @testset "Gate" begin
-    op = rand(2,2)
-    H = op+op'
+    op = rand(Float64,2,2)
+    g = Gate(op)
+    for k1 in 1:2
+        for k2 in 1:2
+        @test g[k1,k2] == op[k1,k2]
+        end
+    end
+
+    @test typeof(g) == GenericSquareGate{Float64,2}
+    @test complex(typeof(g)) == GenericSquareGate{ComplexF64,2}
+
+    H = (op+op')/2
     U = exp(H*1.0im)
-    @test ishermitian(op) == ishermitian(Gate(op))
-    @test ishermitian(Gate(H))
-    @test isunitary(op) == isunitary(Gate(op))
+    @test ishermitian(op) == ishermitian(g)
+    @test ishermitian(Gate(Matrix(H)))
+    @test isunitary(op) == isunitary(g)
     @test isunitary(Gate(U))
+
+    id = IdentityGate;
+    z = rand(ComplexF64)
+    @test data(z*id) == z
+    @test data(id*z) == z
+    @test data(z*g) ≈ z*data(g)
+    @test data(g*z) ≈ z*data(g)
+
+    @test g+g ≈ 2*g ≈ data(g)+data(g) 
+    @test id+id ≈ 2*id 
+    @test g + z*id ≈ data(g) + z*one(data(g))
+    @test z*id + g  ≈ data(g) + z*one(data(g))
+
+    @test data(exp(z*id)) ≈ exp(z) 
+    @test data(exp(g)) ≈ exp(data(g)) 
+    
+    @test id' == id
+    @test data((z*id)') ≈ z'
+
+    @test Hermitian(z*g) ≈ Gate((z*op)'+(z*op))/2
+
+    site = qubit(rand(),rand())
+    expval = vec(data(site))'*op*vec(data(site))
+    @test expectation_value([site],g) ≈ expval
+    g2 = Gate(TensorNetworks.gate(kron(op,op),2));
+    @test expectation_value([site,site],g2) ≈ expval^2
+
+    @test expectation_value([site], z*id) ≈ z
+    @test expectation_value([site,site], z*id) ≈ z
+    @test expectation_value([site,site,site], z*id) ≈ z
+
+    D = 10;
+    d = 2;
+    site = randomGenericSite(D,d,D);
 
     d = 4;
     mat = rand(ComplexF64,d,d);
@@ -15,6 +59,7 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     @test data(gate) ≈ mat
     @test data(gate') ≈ mat'
     @test data(gate*gate) ≈ mat*mat
+
 
     tens = rand(ComplexF64,2,2,2,2);
     gate = Gate(tens);
@@ -34,6 +79,7 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     @tensor tensaux[:] := mataux[-1,-3] *mataux[-2,-4];
     gateaux = TensorNetworks.auxillerate(Gate(tens));
     @test data(gateaux) ≈ tensaux
+
 
 end
 
@@ -131,6 +177,10 @@ end
     @test size(T) == (D^2,D^2)
     @test Matrix(T') ≈ Matrix(T)'
     @test transpose(Matrix(T)) ≈ Matrix(transfer_matrix(site,:right))
+
+    z = rand(ComplexF64)
+    @test Matrix(T) ≈ Matrix(transfer_matrix(site,IdentityGate))
+    @test z*Matrix(T) ≈ Matrix(transfer_matrix(site,z*IdentityGate))
 
     @test idvec ≈ transfer_matrix(R)*idvec
     @test idvec ≈ transfer_matrix(L,:right)*idvec
@@ -243,7 +293,7 @@ end
     Dmax = 20
     ham = IsingMPO(Nchain, 1, 1, 0)
     mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax))
-    states, energies = eigenstates(ham, mps, 5; precision = 1e-8)
+    states, energies = eigenstates(ham, mps, 5; precision = 1e-8,alpha=1.0)
     @test abs(energies[1]/(Nchain-1) + 4/π) < 1/Nchain
 end
 

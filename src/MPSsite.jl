@@ -238,7 +238,7 @@ function transfer_left(site::GenericSite,mpo::MPOsite)
 	transfer_left(data(site), mpo)
 end
 
-function transfer_matrix(site::OrthogonalLinkSite, mpo::MPOsite, direction=:left)
+function transfer_matrix(site::OrthogonalLinkSite, mpo::MPOsite, direction::Symbol=:left)
     if ispurification(site)
 		mpo = auxillerate(mpo)
 	end
@@ -251,7 +251,7 @@ function transfer_matrix(site::OrthogonalLinkSite, mpo::MPOsite, direction=:left
 	end
 	return T
 end
-function transfer_matrix(site::OrthogonalLinkSite, direction=:left)
+function transfer_matrix(site::OrthogonalLinkSite, direction::Symbol=:left)
 	if direction == :left
 		T = transfer_left(data(site.Γ*site.Λ2))
 	elseif direction == :right
@@ -262,7 +262,7 @@ function transfer_matrix(site::OrthogonalLinkSite, direction=:left)
 	return T
 end
 
-function transfer_matrix(site::GenericSite, direction=:left)
+function transfer_matrix(site::GenericSite, direction::Symbol=:left)
 	if direction == :left
 		T = transfer_left(data(site))
 	elseif direction == :right
@@ -273,9 +273,9 @@ function transfer_matrix(site::GenericSite, direction=:left)
 	return T
 end
 
-transfer_matrix(site::GenericSite, op::Array{<:Number,2}, direction=:left) = transfer_matrix(site,MPOsite(op), direction)
+transfer_matrix(site::GenericSite, op::Array{<:Number,2}, direction::Symbol=:left) = transfer_matrix(site,MPOsite(op), direction)
 
-function transfer_matrix(site::GenericSite, mpo::MPOsite, direction=:left)
+function transfer_matrix(site::GenericSite, mpo::MPOsite, direction::Symbol=:left)
     if ispurification(site)
 		mpo = auxillerate(mpo)
 	end
