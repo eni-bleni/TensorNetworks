@@ -183,45 +183,44 @@ function to_orthogonal_link(M::Vector{GenericSite{T}}, trunc::TruncationArgs) wh
 end
 
 #%% Expectation values
-"""
-    expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
+# """
+#     expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
 
-Return the expectation value of the mpo starting at `site`
+# Return the expectation value of the mpo starting at `site`
 
-See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
-"""
-function expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer = 1)
-    oplength = operator_length(mpo)
-    T = transfer_matrix(mps,mpo,site,:right)
-    dl = size(mps.Γ[site],1)
-    Λ2 = Diagonal(data(mps[site+oplength-1].Λ2).^2)
-    dr = length(mps.Λ[site+oplength])
-    L = T*vec(Matrix(1.0I,dl,dl))
-    return tr(Λ2*reshape(L,dr,dr))
-end
+# See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
+# """
+# function expectation_value(mps::OpenMPS, mpo::AbstractMPO, site::Integer = 1)
+#     oplength = length(mpo)
+#     T = transfer_matrix(mps,mpo,site,:right)
+#     dl = size(mps.Γ[site],1)
+#     Λ2 = Diagonal(data(mps[site+oplength-1].Λ2).^2)
+#     dr = length(mps.Λ[site+oplength])
+#     L = T*vec(Matrix(1.0I,dl,dl))
+#     return tr(Λ2*reshape(L,dr,dr))
+# end
 
-"""
-    expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
+# """
+#     expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
 
-Return the expectation value of the mpo starting at `site`
+# Return the expectation value of the mpo starting at `site`
 
-See also: [`expectation_value`](@ref)
-"""
-function expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
-    oplength = operator_length(mpo)
-    T = transfer_matrix(mps,mpo,site,:left)
-    dr = size(mps.Γ[site+oplength-1],3)
-    Λ2 = Diagonal(mps.Λ[site].^2)
-    R = T*vec(Matrix(1.0I,dr,dr))
-    dl = length(mps.Λ[site])
-    return tr(Λ2*reshape(R,dl,dl))
-end
+# See also: [`expectation_value`](@ref)
+# """
+# function expectation_value_left(mps::OpenMPS, mpo::AbstractMPO, site::Integer)
+#     oplength = length(mpo)
+#     T = transfer_matrix(mps,mpo,site,:left)
+#     dr = size(mps.Γ[site+oplength-1],3)
+#     Λ2 = Diagonal(mps.Λ[site].^2)
+#     R = T*vec(Matrix(1.0I,dr,dr))
+#     dl = length(mps.Λ[site])
+#     return tr(Λ2*reshape(R,dl,dl))
+# end
 
 function apply_layers_nonunitary(mps::OpenMPS, layers)
     sites, err = apply_layers_nonunitary(mps[1:end], layers, mps.truncation)
     return OpenMPS(sites,truncation=mps.truncation, error = mps.error + err)
 end
-
 
 
 """

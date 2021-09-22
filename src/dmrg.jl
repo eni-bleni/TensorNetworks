@@ -110,50 +110,15 @@ function sweep(mps::LCROpenMPS{T}, mpo, HL, HR, CL, CR, prec, dir, orth::Vector{
     eold=0.0 #TODO this was chosen arbitrarily
     if dir==:right 
         itr = 1:L-1
-    else
+        dirval=1
+    elseif dir==:left
         itr = L:-1:2
+        dirval=-1
+    else
+        @error "In sweep: choose dir :left or :right"
     end
     for j in itr
-        
-        # if dir==:left
-        #     j::Int = L+1-j
-        # end
-
-        # szmps = size(mps[j])
-        # mpsguess = vec(mps.Γ[j])
-        # #HeffFun(vec) = reshape(HeffMult(reshape(vec,szmps),mpo[j],HL[j],HR[j]),prod(szmps))
-
-        # for k = 1:N_orth
-        #     @tensoropt (1,-1,2,-3) orthTensors[k][:] := CL[k][j][1,-1]*CR[k][j][2,-3]*conj(orth[k].Γ[j][1,-2,2])
-        # end
-        # function HeffFun(Avec)
-        #     A = reshape(Avec, szmps)
-        #     Aout = HeffMult(A,mpo[j],HL[j],HR[j])
-        #     for k = 1:length(orth)
-        #         @tensor overlap[:] := orthTensors[k][1,2,3]*A[1,2,3]
-        #         Aout += 100*conj(orthTensors[k]) .* overlap
-        #     end
-        #     return vec(Aout)
-        # end
-        # hefflin = LinearMap{ComplexF64}(HeffFun, prod(szmps),ishermitian=true)
-
-        # if size(hefflin)[1] < 20
-        #     evals, evecs = eigen(Matrix(hefflin))
-        # else
-        #     #println(norm(hefflin*mpsguess))
-        #     #evals, evecs = eigs(hefflin,nev=2,which=:SR,tol=prec,v0=mpsguess)
-        #     evals, evecs = eigsolve(hefflin, mpsguess, 2, :SR, tol=prec, ishermitian=true)
-        #     evecs = hcat(evecs...)
-        # end
-
-        # if !(evals ≈ real(evals))
-        #     println("ERROR: no real eigenvalues")
-        #     return 0
-        # end
-        # evals = real(evals)
-        # eval_min, ind_min = findmin(evals)
-        # evec_min = evecs[:,ind_min]
-        #Mj = reshape(evec_min,szmps)
+    
         @assert (center(mps) == j) "The optimization step is not performed at the center of the mps: $(center(mps)) vs $j"
         cl = [CL[k][j] for k in 1:N_orth]
         cr = [CR[k][j] for k in 1:N_orth]
@@ -169,32 +134,30 @@ function sweep(mps::LCROpenMPS{T}, mpo, HL, HR, CL, CR, prec, dir, orth::Vector{
             else
                 alpha *= 1.2
             end
+            if dir==:right
+                env=HL[j]
+            else
+                env = HR[j]
+            end
+            A,B = subspace_expand(alpha,mps[j],mps[j+dirval],env,mpo[j],mps.truncation, dir)
+            mps.center+=dirval
+            mps.Γ[j] = A
+            mps.Γ[j+dirval] = B
+            # if dir==:right
+            #     A,B = subspace_expand_right(alpha,mps[j],mps[j+1],HL[j],mpo[j],mps.truncation)
+            #     mps.center+=1
+            #     mps.Γ[j] = A
+            #     mps.Γ[j+1] = B
+            # end
         elseif dir==:right 
             shift_center_right!(mps)
+        elseif dir==:left
+            shift_center_left!(mps)
         end
         eold = enew
 
-        if dir==:right && alpha> 0.0
-           A,B = subspace_expand_right(alpha,mps[j],mps[j+1],HL[j],mpo[j],mps.truncation)
-           mps.center+=1
-           mps.Γ[j] = A
-           mps.Γ[j+1] = B
-        end
-        #if dir == :right 
-        #    mps = shift_center_right(mps)
-        if dir == :left #TODO add subspace expansion also to the left
-            shift_center_left!(mps)
-        end
-        #Aj,R = LRcanonical(Mj,switch_canonicity(canonicity)) 
-        #mps[j] = Aj
-        # if canonicity==:right
-        #     @tensor mps.Γ[j+1][-1,-2,-3] := R[-1,1]*mps.Γ[j+1][1,-2,-3];
-        # elseif canonicity==:left
-        #     @tensor mps.Γ[j-1][-1,-2,-3] := R[1,-3]*mps.Γ[j-1][-1,-2,1];
-        # end
         updateCLR(mps,CL,CR,j,dir,orth)
         updateHLR(mps,mpo,HL,HR,j,dir)
-        
     end
     return mps, alpha
 end
@@ -329,7 +292,31 @@ function expansion_term(alpha, site, hl, mposite)
     return alpha*reshape(P,size(hl,1),size(site,2),size(mposite,4)*size(site,3))
 end
 
-function subspace_expand_right(alpha,site,nextsite,hl,mposite, trunc)
+# function subspace_expand_right(alpha,site,nextsite,hl,mposite, trunc)
+#     ss= size(site)
+#     ss2 = size(nextsite)
+#     d = ss[2]
+#     P = expansion_term(alpha, data(site), hl, data(mposite))
+#     sp = size(P)
+#     P0 = zeros(ComplexF64, sp[3], d, ss2[3])
+#     M = Array{ComplexF64,3}(undef,(ss[1],ss[2],ss[3]+sp[3]))
+#     B = Array{ComplexF64,3}(undef,(ss2[1]+sp[3],ss2[2],ss2[3]))
+#     for k in 1:d
+#         M[:,k,:] = hcat(data(site)[:,k,:],P[:,k,:])
+#         B[:,k,:] = vcat(data(nextsite)[:,k,:],P0[:,k,:])
+#     end
+#     U,S,V,err = split_truncate!(reshape(M,ss[1]*ss[2],ss[3]+sp[3]), trunc)
+#     newsite = GenericSite(reshape(Matrix(U),ss[1],ss[2],length(S)), false)
+#     newnextsite = VirtualSite(Diagonal(S)*V)*GenericSite(B,false)
+#     return newsite, newnextsite
+# end
+
+function subspace_expand(alpha,site,nextsite,hl,mposite, trunc, dir)
+    if dir==:left
+        site = reverse_direction(site)
+        nextsite = reverse_direction(nextsite)
+        mposite = reverse_direction(mposite)
+    end
     ss= size(site)
     ss2 = size(nextsite)
     d = ss[2]
@@ -344,6 +331,11 @@ function subspace_expand_right(alpha,site,nextsite,hl,mposite, trunc)
     end
     U,S,V,err = split_truncate!(reshape(M,ss[1]*ss[2],ss[3]+sp[3]), trunc)
     newsite = GenericSite(reshape(Matrix(U),ss[1],ss[2],length(S)), false)
-    newnextsite = VirtualSite(diagm(S)*V)*GenericSite(B,false)
+    newnextsite = VirtualSite(Diagonal(S)*V)*GenericSite(B,false)
+    if dir==:left
+        newsite = reverse_direction(newsite)
+        newnextsite = reverse_direction(newnextsite)
+    end
     return newsite, newnextsite
 end
+

@@ -48,6 +48,7 @@ include("coarsegraining.jl")
 include("tebd.jl")
 include("transfer.jl")
 include("dmrg.jl")
+include("expectation_values.jl")
 include("states.jl")
 
 end # module

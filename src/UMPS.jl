@@ -125,7 +125,7 @@ end
 
 # %% Transfer
 function transfer_matrix(mps::UMPS, gate::AbstractSquareGate, site::Integer, direction = :left)
-	oplength = operator_length(gate)
+	oplength = length(gate)
 	if ispurification(mps)
 		gate = auxillerate(gate)
 	end
@@ -164,7 +164,8 @@ function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
 	# 	tensors[i] = reshape(vecs[:,i],D,D)
 	# end
 	nev = min(length(vals),nev)
-    return vals[1:nev], vecs[:,1:nev] #canonicalize_eigenoperator.(tensors)
+	tensors =  [reshape(vecs[:,k],D,D) for k in 1:nev]
+    return vals[1:nev], tensors #canonicalize_eigenoperator.(tensors)
 end
 
 """
@@ -173,10 +174,11 @@ end
 Return the spectrum of the transfer matrix of the UMPS, with mpo sandwiched
 """
 function transfer_spectrum(mps::UMPS{K}, mpo::AbstractMPO, direction=:left; nev=1) where {K}
-    T = transfer_matrix(mps,mpo,direction=direction)
-	N = size(T,1)
-	D = Int(sqrt(N/size(mpo[1],1)))
-	nev = minimum([N, nev])
+    T = transfer_matrix(mps, mpo, direction)
+	DdD = size(T,1)
+	d = size(mpo[1],1)
+	D = Int(sqrt(N/d))
+	nev = minimum([DdD, nev])
     if N<10
         vals, vecs = eigen(Matrix(T))
         vals = vals[end:-1:end-nev+1]
@@ -189,7 +191,8 @@ function transfer_spectrum(mps::UMPS{K}, mpo::AbstractMPO, direction=:left; nev=
         vals, vecsvec = eigsolve(T,x0,nev)#eigs(T,nev=nev)
 		vecs = hcat(vecsvec...)
     end
-    return vals, vecs[:,1:nev] #canonicalize_eigenoperator.(tensors)
+	tensors =  [reshape(vecs[:,k],D,d,D) for k in 1:nev]
+    return vals, tensors #canonicalize_eigenoperator.(tensors)
 end
 
 function LinearAlgebra.norm(mps::UMPS) #FIXME dont assume canonical
@@ -228,8 +231,8 @@ function canonicalize_cell!(mps::UMPS)
 
 	valR, rhoRs = transfer_spectrum(mps,:left,nev=2)
 	valL, rhoLs = transfer_spectrum(mps,:right,nev=2)
-	rhoR =  canonicalize_eigenoperator(reshape(rhoRs[:,1],D,D))
-	rhoL =  canonicalize_eigenoperator(reshape(rhoLs[:,1],D,D))
+	rhoR =  canonicalize_eigenoperator(rhoRs[1])
+	rhoL =  canonicalize_eigenoperator(rhoLs[1])
 
     #Cholesky
 	if isposdef(rhoR) && isposdef(rhoL)
@@ -271,7 +274,7 @@ function canonicalize!(mps::UMPS)
 	end
 	canonicalize_cell!(mps)
 	if N==2
-		ΓL, ΓR, error = apply_two_site_gate(mps[1],mps[2], IdentityGate, mps.truncation)
+		ΓL, ΓR, error = apply_two_site_gate(mps[1],mps[2], IdentityGate(2), mps.truncation)
 	    #mps.Γ[1], mps.Λ[2], mps.Γ[2], err = apply_two_site_identity(mps.Γ, mps.Λ[mod1.(1:3,2)], mps.truncation)
 		#mps.error += err
 		Γ, Λ = ΓΛ([ΓL, ΓR]) 
@@ -304,26 +307,38 @@ function boundary(mps::UMPS)
 	rhoL =  reshape(rhoLs[:,1],DL,DL)
 	return rhoL, rhoR
 end
+transfer_matrix_bond(mps::UMPS, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
+transfer_matrix_bond(mps1::UMPS, mps2::UMPS, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
+# """ 
+# 	boundary(mps::UMPS, mpo::MPO) 
 
-""" 
-	boundary(mps::UMPS, mpo::MPO) 
-
-Return the left and right dominant eigentensors of the transfer matrix
-"""
-function boundary(mps::UMPS, mpo::AbstractMPO) #FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
-	valR, rhoRs = transfer_spectrum(mps,mpo,:left,nev=2)
-	valL, rhoLs = transfer_spectrum(mps,mpo,:right,nev=2)
-	DmpoR = size(mpo[end],4)
-	DmpoL = size(mpo[1],1)
-	DR = Int(sqrt(length(rhoRs[:,1])/DmpoR))
-	DL = Int(sqrt(length(rhoLs[:,1])/DmpoL))
-	rhoR =  reshape(rhoRs[:,1],DR,DmpoR,DR)
-	rhoL =  reshape(rhoLs[:,1],DL,DmpoL,DL)
-	return rhoL, rhoR
+# Return the left and right dominant eigentensors of the transfer matrix
+# """
+# function boundary(mps::UMPS, mpo::AbstractMPO) #FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
+# 	valR, rhoRs = transfer_spectrum(mps,mpo,:left,nev=2)
+# 	valL, rhoLs = transfer_spectrum(mps,mpo,:right,nev=2)
+# 	DmpoR = size(mpo[end],4)
+# 	DmpoL = size(mpo[1],1)
+# 	DR = Int(sqrt(length(rhoRs[:,1])/DmpoR))
+# 	DL = Int(sqrt(length(rhoLs[:,1])/DmpoL))
+# 	rhoR =  reshape(rhoRs[:,1],DR,DmpoR,DR)
+# 	rhoL =  reshape(rhoLs[:,1],DL,DmpoL,DL)
+# 	return rhoL, rhoR
+# end
+function boundary(mps::UMPS,mpo::AbstractMPO, side::Symbol)
+	_, rhos = transfer_spectrum(mps,mpo, reverse_direction(side),nev=2)
+	return canonicalize_eigenoperator(rhos[1])
 end
 
+function boundary(mps::UMPS, side::Symbol)
+	_, rhos = transfer_spectrum(mps, reverse_direction(side),nev=2)
+	return canonicalize_eigenoperator(rhos[1])
+end
+
+
 #TODO Calculate expectation values and effective hamiltonian as in https://arxiv.org/pdf/1207.0652.pdf
-""" #FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
+#FIXME should implement https://arxiv.org/pdf/1207.0652.pdf
+""" 
 	effective_hamiltonian(mps::UMPS, mpo::MPO) 
 
 Return the left and right effective_hamiltonian
@@ -332,7 +347,7 @@ function effective_hamiltonian(mps::UMPS{T}, mpo::AbstractMPO; direction=:left) 
 	Dmpo = size(mpo[end],1)
 	D = length(mps.Λ[1])
 	sR = (D,Dmpo,D)
-	TL = transfer_matrix(mps,mpo,direction=direction)
+	TL = transfer_matrix(mps,mpo,direction)
 	TIL = transfer_matrix(mps,direction)
 	@warn "Make sure that mpo is lower triangular with identity on the first and last place of the diagonal"
 	rhoR = zeros(T,sR) #TODO Sparse array?
@@ -345,7 +360,7 @@ function effective_hamiltonian(mps::UMPS{T}, mpo::AbstractMPO; direction=:left) 
 		rhoR[:,itr[k],:] = reshape(TL * vec(rhoR),sR)[:,itr[k],:]
 	end
 	C = rhoR[:,itr[1],:]
-	rho = diagm(data(mps.Λ[1]).^2)
+	rho = Diagonal(data(mps.Λ[1]).^2)
 	@tensor e0[:] := C[1,2]*rho[1,2]
 	idvec = vec(Matrix{T}(I,D,D))
 	function TI(v)
@@ -373,8 +388,8 @@ function canonicalize_cell(mps::UMPS)
 
 	valR, rhoRs = transfer_spectrum(mps,:left,nev=2)
 	valL, rhoLs = transfer_spectrum(mps,:right,nev=2)
-	rhoR =  canonicalize_eigenoperator(reshape(rhoRs[:,1],D,D))
-	rhoL =  canonicalize_eigenoperator(reshape(rhoLs[:,1],D,D))
+	rhoR =  canonicalize_eigenoperator(rhoRs[1])
+	rhoL =  canonicalize_eigenoperator(rhoLs[1])
 
     #Cholesky
 	if isposdef(rhoR) && isposdef(rhoL)
@@ -420,7 +435,7 @@ function canonicalize(mps::UMPS)
 		mpsout = mps
 	elseif N==2
 	    #Γ[1],Λ2,Γ[2], err = apply_two_site_identity(mps.Γ, mps.Λ[mod1.(1:3,2)], mps.truncation)
-		ΓL, ΓR, err = apply_two_site_gate(mps[1],mps[2], IdentityGate, mps.truncation)
+		ΓL, ΓR, err = apply_two_site_gate(mps[1],mps[2], IdentityGate(2), mps.truncation)
 		mpsout = UMPS([ΓL, ΓR], truncation=mps.truncation, error = err)
 	else
 		error("Canonicalizing $N unit sites not implemented")
@@ -460,9 +475,10 @@ function double(mps::UMPS)
 end
 
 
+
 #%% Expectation values
 function expectation_value(mps::UMPS, op::Array{T_op,N_op}, site::Integer) where {T_op<:Number,N_op}
-	opLength=operator_length(op)
+	opLength=length(op)
 	N = length(mps.Γ)
 	if ispurification(mps)
 		op = auxillerate(op)
@@ -477,46 +493,46 @@ function expectation_value(mps::UMPS, op::Array{T_op,N_op}, site::Integer) where
 	return val
 end
 
-expectation_value(mps::UMPS, op::MPOsite, site::Integer) = expectation_value(mps[site],op)
+# expectation_value(mps::UMPS, op::MPOsite, site::Integer) = expectation_value(mps[site],op)
 
-function expectation_values_two_site(mps::UMPS, op)
-	valRs, vecRs = transfer_spectrum(mps,:left,nev=4)
-	valLs, vecLs = transfer_spectrum(mps,:right,nev=4)
-	DR = length(mps.Λ[1])
-	DL = length(mps.Λ[1])
-	rhoRs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecRs[:,k],DR,DR),1:4)))
-	rhoLs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecLs[:,k],DL,DL),1:4)))
-	thetaL = similar(mps.Γ[1])
-	thetaR = similar(mps.Γ[2])
-    absorb_l!(thetaL,mps.Λ[1],mps.Γ[1],mps.Λ[2])
-	absorb_l!(thetaR,mps.Γ[2],mps.Λ[1])
-    #rs = Array{Any,2}(undef,4,4)
-	f(k1,k2) = @tensoropt (d,u,r,l,Ru,Rd,Lu,Ld) rhoLs[k1][Lu,Ld]*thetaL[Ld,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[Lu,clu,u]) *conj(thetaR[u,cru,Ru]) *thetaR[d,crd,Rd] *rhoRs[k2][Ru,Rd]
-	rs = [ f(k1,k2) for k1 in 1:4, k2 in 1:4 ]
-    return rs
-end
+# function expectation_values_two_site(mps::UMPS, op)
+# 	valRs, vecRs = transfer_spectrum(mps,:left,nev=4)
+# 	valLs, vecLs = transfer_spectrum(mps,:right,nev=4)
+# 	DR = length(mps.Λ[1])
+# 	DL = length(mps.Λ[1])
+# 	rhoRs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecRs[:,k],DR,DR),1:4)))
+# 	rhoLs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecLs[:,k],DL,DL),1:4)))
+# 	thetaL = similar(mps.Γ[1])
+# 	thetaR = similar(mps.Γ[2])
+#     absorb_l!(thetaL,mps.Λ[1],mps.Γ[1],mps.Λ[2])
+# 	absorb_l!(thetaR,mps.Γ[2],mps.Λ[1])
+#     #rs = Array{Any,2}(undef,4,4)
+# 	f(k1,k2) = @tensoropt (d,u,r,l,Ru,Rd,Lu,Ld) rhoLs[k1][Lu,Ld]*thetaL[Ld,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[Lu,clu,u]) *conj(thetaR[u,cru,Ru]) *thetaR[d,crd,Rd] *rhoRs[k2][Ru,Rd]
+# 	rs = [ f(k1,k2) for k1 in 1:4, k2 in 1:4 ]
+#     return rs
+# end
 
-expectation_values(mps::UMPS, g::ScaledIdentityGate) = fill(data(g)*norm(mps), length(mps))
+# expectation_values(mps::UMPS, g::ScaledIdentityGate) = fill(data(g)*norm(mps), length(mps))
 
-function expectation_values(mps::UMPS,op)
-    opDims = size(op)
-    opLength = Int(length(opDims)/2)
-    N = length(mps.Γ)
-	if ispurification(mps)
-		op = auxillerate(op)
-	end
-	vals = Array{ComplexF64,1}(undef,N)
-	for site in 1:N
-		if opLength == 1
-			vals[site] = expectation_value_one_site(mps.Λ[site], mps.Γ[site], mps.Λ[mod1(site+1,N)], op)
-		elseif opLength == 2
-			vals[site] = expectation_value_two_site(mps.Γ[mod1.(site:site+1,N)], mps.Λ[mod1.(site:site+2,N)], op)
-		else
-			error("Expectation value not implemented for operators of this size")
-		end
-	end
-    return vals
-end
+# function expectation_values(mps::UMPS,op)
+#     opDims = size(op)
+#     opLength = Int(length(opDims)/2)
+#     N = length(mps.Γ)
+# 	if ispurification(mps)
+# 		op = auxillerate(op)
+# 	end
+# 	vals = Array{ComplexF64,1}(undef,N)
+# 	for site in 1:N
+# 		if opLength == 1
+# 			vals[site] = expectation_value_one_site(mps.Λ[site], mps.Γ[site], mps.Λ[mod1(site+1,N)], op)
+# 		elseif opLength == 2
+# 			vals[site] = expectation_value_two_site(mps.Γ[mod1.(site:site+1,N)], mps.Λ[mod1.(site:site+2,N)], op)
+# 		else
+# 			error("Expectation value not implemented for operators of this size")
+# 		end
+# 	end
+#     return vals
+# end
 
 function correlator(mps::UMPS{T},op1,op2,n) where {T}
 	opsize = size(op1)
@@ -554,7 +570,8 @@ function canonicalize_eigenoperator(rho)
     trρ = tr(rho)
     phase = trρ/abs(trρ)
     rho = rho ./ phase
-    return  Hermitian((rho + rho')/2)
+	rhoH = Hermitian((rho + rho')/2)
+    return rhoH/tr(rhoH) * size(rhoH,1)
 end
 
 
@@ -566,7 +583,7 @@ function renyi(mps::UMPS, n)
 	sizes = size.(mps.Γ)
 	id = Matrix{T}(I,sizes[1][1],sizes[1][1])
 	leftVec = vec(@tensor id[-1,-2]*id[-3,-4])
-	Λsquares = diagm.(mps.Λ .^2)
+	Λsquares = Diagonal.(mps.Λ .^2)
 	rightVecs = map(k->vec(@tensor Λsquares[-1,-2]*Λsquares[-3,-4])', 1:N)
     vals = Float64[]
     for k in 1:n

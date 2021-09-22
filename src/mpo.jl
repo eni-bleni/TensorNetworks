@@ -52,6 +52,7 @@ data(mpo::MPO) = mpo.data
 # HermitianMPO(ops::Array{Array{T,4},1}) where {T<:Number} = HermitianMPO(map(op->MPOsite(op),ops))
 
 Base.size(mposite::MPOsite) = size(data(mposite))
+Base.length(mpo::MPOsite) = 1
 Base.size(mpo::AbstractMPO) = size(data(mpo))
 Base.length(mpo::MPO) = length(data(mpo))
 Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
@@ -61,8 +62,6 @@ Base.getindex(mpo::AbstractMPO, i::Integer) = mpo.data[i]
 #Base.setindex!(mpo::MPOsite, v, I::Vararg{Integer,4}) = (mpo.data[I] = v)
 #Base.setindex!(mpo::AbstractMPO, v, I::Vararg{Integer,N}) where {N} = (mpo.data[I] = v)
 
-operator_length(mpo::AbstractMPO) = length(mpo)
-operator_length(mpo::MPOsite) = 1
 
 """
 	auxillerate(mpo)
@@ -96,7 +95,7 @@ function addmpos(mpo1,mpo2,a,b,Dmax,tol=0) #FIXME
             tmp = reshape(tmp,size(mpo[i-1])[1]*d*d,d*d*size(mpo[i])[4])
             F = svd(tmp)
             U,S,V = truncate_svd(F,Dmax,tol)
-            mpo[i-1] = reshape(1/2*U*diagm(S),size(mpo[i-1])[1],d,d,D)
+            mpo[i-1] = reshape(1/2*U*Diagonal(S),size(mpo[i-1])[1],d,d,D)
             mpo[i] = reshape(2*V,D,d,d,size(mpo[i])[4])
         end
     end
@@ -106,7 +105,7 @@ function addmpos(mpo1,mpo2,a,b,Dmax,tol=0) #FIXME
         tmp = reshape(tmp,size(mpo[L-1])[1]*d*d,d*d*size(mpo[L])[4])
         F = svd(tmp)
         U,S,V = truncate_svd(F,D,tol)
-        mpo[L-1] = reshape(1/2*U*diagm(S),size(mpo[L-1])[1],d,d,D)
+        mpo[L-1] = reshape(1/2*U*Diagonal(S),size(mpo[L-1])[1],d,d,D)
         mpo[L] = reshape(2*V,D,d,d,size(mpo[L])[4])
     end
     return mpo

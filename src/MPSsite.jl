@@ -1,5 +1,3 @@
-operator_length(op::AbstractSite) = 1
-
 Base.permutedims(site::GenericSite, perm) = GenericSite(permutedims(site.Γ,perm), site.purification)
 Base.copy(site::OrthogonalLinkSite) = OrthogonalLinkSite([copy(getfield(site, k)) for k = 1:length(fieldnames(OrthogonalLinkSite))]...) 
 Base.copy(site::GenericSite) = GenericSite([copy(getfield(site, k)) for k = 1:length(fieldnames(GenericSite))]...) 
@@ -37,6 +35,21 @@ LinearAlgebra.norm(site::GenericSite) = norm(data(site))
 LinearAlgebra.norm(site::LinkSite) = norm(data(site))
 LinearAlgebra.norm(site::VirtualSite) = norm(data(site))
 
+Base.eltype(::GenericSite{T}) where {T} = T
+Base.eltype(::LinkSite{T}) where {T} = T
+Base.eltype(::OrthogonalLinkSite{T}) where {T} = T
+Base.eltype(::VirtualSite{T}) where {T} = T
+
+function LinearAlgebra.ishermitian(site::MPOsite)
+	ss = size(site)
+	if !(ss[1] == 1 && ss[4] == 1)
+		return false
+	else
+		m =reshape(data(site),ss[2],ss[3])
+		return ishermitian(m)
+	end
+end
+
 function LeftOrthogonalSite(site::OrthogonalLinkSite; check=true) 
 	L = site.Λ1*site.Γ
 	check || @assert isleftcanonical(L) "In LeftOrthogonalSite: site is not left canonical"
@@ -47,9 +60,18 @@ function RightOrthogonalSite(site::OrthogonalLinkSite; check=true)
 	check || @assert isrightcanonical(R) "In RightOrthogonalSite: site is not right canonical"
 	return R
 end
+function OrthogonalSite(site::OrthogonalLinkSite, side; check=true) 
+	if side==:left
+		return LeftOrthogonalSite(site,check=check)
+	elseif side==:right
+		return RightOrthogonalSite(site,check=check)
+	else 
+		"Error in OrthogonalSite: choose side :left or :right"
+	end
+end
 
 """
-LeftOrthogonalSite(site::GenericSite, dir)-> A,R,DB
+to_left_orthogonal(site::GenericSite, dir)-> A,R,DB
 
 Return the left orthogonal form of the input site as well as the remainder.
 """
@@ -132,7 +154,7 @@ function Base.:*(gate::GenericSquareGate, Γ::Tuple{GenericSite, GenericSite})
 	g = data(gate)
 	@tensoropt (5,-1,-4) theta[:] := L[-1,2,5]*R[5,3,-4]*g[-2,-3,2,3]
 end
-function Base.:*(gate::ScaledIdentityGate, Γ::Tuple{GenericSite, GenericSite})
+function Base.:*(gate::ScaledIdentityGate{<:Number,4}, Γ::Tuple{GenericSite, GenericSite})
 	@tensor theta[:] := data(gate)*data(Γ[1])[-1,-2,1]*data(Γ[2])[1,-3,-4]
 end	
 
@@ -150,7 +172,7 @@ OrthogonalLinkSite(Γ::GenericSite, Λ1::LinkSite, Λ2::LinkSite; check=false) =
 
 Contract and compress the two sites using the svd. Return two U,S,V,err where U is a LeftOrthogonalSite, S is a LinkSite and V is a RightOrthogonalSite
 """
-compress(Γ1::AbstractSite, Γ2::AbstractSite,args::TruncationArgs) = apply_two_site_gate(Γ1,Γ2,IdentityGate,args)
+compress(Γ1::AbstractSite, Γ2::AbstractSite,args::TruncationArgs) = apply_two_site_gate(Γ1,Γ2,IdentityGate(2), args)
 
 """
 	apply_two_site_gate(Γ1::GenericSite, Γ2::GenericSite, gate, args::TruncationArgs)
@@ -219,75 +241,6 @@ function to_right_orthogonal(M::Vector{GenericSite{T}}; method=:qr) where {T}
 end
 
 
-transfer_left(site::OrthogonalLinkSite) = transfer_left(RightOrthogonalSite(site))
-transfer_right(site::OrthogonalLinkSite) = transfer_right(LeftOrthogonalSite(site))
-transfer_left(site::OrthogonalLinkSite, mpo::MPOsite) = transfer_left(RightOrthogonalSite(site), mpo)
-transfer_right(site::OrthogonalLinkSite, mpo::MPOsite) = transfer_right(LeftOrthogonalSite(site), mpo)
-transfer_right(site::GenericSite) = transfer_right(data(site))
-transfer_left(site::GenericSite) = transfer_left(data(site))
-function transfer_right(site::GenericSite, mpo::MPOsite)
-	if ispurification(site)
-		mpo = auxillerate(mpo)
-	end
-	transfer_right(data(site), mpo)
-end
-function transfer_left(site::GenericSite,mpo::MPOsite)
-	if ispurification(site)
-		mpo = auxillerate(mpo)
-	end	
-	transfer_left(data(site), mpo)
-end
-
-function transfer_matrix(site::OrthogonalLinkSite, mpo::MPOsite, direction::Symbol=:left)
-    if ispurification(site)
-		mpo = auxillerate(mpo)
-	end
-	if direction == :left
-		T = transfer_left(data(site.Γ*site.Λ2), mpo)
-	elseif direction == :right
-		T = transfer_right(data(site.Λ1*site.Γ), mpo)
-	else
-		error("Choose direction :left or :right")
-	end
-	return T
-end
-function transfer_matrix(site::OrthogonalLinkSite, direction::Symbol=:left)
-	if direction == :left
-		T = transfer_left(data(site.Γ*site.Λ2))
-	elseif direction == :right
-		T = transfer_right(data(site.Λ1*site.Γ))
-	else
-		error("Choose direction :left or :right")
-	end
-	return T
-end
-
-function transfer_matrix(site::GenericSite, direction::Symbol=:left)
-	if direction == :left
-		T = transfer_left(data(site))
-	elseif direction == :right
-		T = transfer_right(data(site))
-	else
-		error("Choose direction :left or :right")
-	end
-	return T
-end
-
-transfer_matrix(site::GenericSite, op::Array{<:Number,2}, direction::Symbol=:left) = transfer_matrix(site,MPOsite(op), direction)
-
-function transfer_matrix(site::GenericSite, mpo::MPOsite, direction::Symbol=:left)
-    if ispurification(site)
-		mpo = auxillerate(mpo)
-	end
-	if direction == :left
-		T = transfer_left(data(site), mpo)
-	elseif direction == :right
-		T = transfer_right(data(site), mpo)
-	else
-		error("Choose direction :left or :right")
-	end
-	return T
-end
 
 function GenericSite(site::OrthogonalLinkSite, direction = :left)
 	if direction==:left

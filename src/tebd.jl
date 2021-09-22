@@ -83,7 +83,7 @@ function apply_layer_nonunitary!(sites::Vector{<:OrthogonalLinkSite}, gates, par
 		if (k<N-1 && k>1) || isperiodic
 			k1 = mod1.(k+dir,N)
 			k2 = mod1.(k+1+dir,N)
-			sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate, truncation)
+			sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate(2), truncation)
 			total_error += error
 		end
 	end
@@ -92,7 +92,7 @@ function apply_layer_nonunitary!(sites::Vector{<:OrthogonalLinkSite}, gates, par
 		total_error += error
 		k1 = mod1.(N+dir,N)
 		k2 = mod1.(N+1+dir,N)
-		sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate, truncation)
+		sites[k1], sites[k2], error = apply_two_site_gate(sites[k1],sites[k2], IdentityGate(2), truncation)
 		total_error += error
 	end
 	return sites, total_error

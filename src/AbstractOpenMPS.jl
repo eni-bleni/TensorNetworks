@@ -20,13 +20,20 @@ function canonicalize!(mps::AbstractOpenMPS,n)
         apply_identity_layer!(mps)
     end
 end
+function boundary(mps::AbstractOpenMPS, side)
+    if side==:left
+        [one(eltype(mps[1]))]
+    elseif side==:right
+        [one(eltype(mps[end]))]
+    end
+end
+boundary(mps1::AbstractOpenMPS,mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
+boundary(mps::AbstractOpenMPS,mpo::AbstractMPO,side) = boundary(mps,side)
+boundary(mps1::AbstractOpenMPS,mpo::AbstractMPO, mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
 
-"""
-    expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer)
+transfer_matrix_bond(mps::AbstractOpenMPS, site::Integer,dir::Symbol) = I
+transfer_matrix_bond(mps1::AbstractOpenMPS,mps2::AbstractOpenMPS, site::Integer,dir::Symbol) = I
 
-Return the expectation value of the local `mpo` at `site`
-"""
-expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer) = expectation_value(mps,MPO(mpo),site)
 
 """
     expectation_values(mps::AbstractOpenMPS, op)
@@ -35,22 +42,22 @@ Return a list of expectation values on every site
 
 See also: [`expectation_value`](@ref)
 """
-function expectation_values(mps::AbstractOpenMPS, op)
-    opLength = operator_length(op)
+function expectation_values(mps::Union{AbstractOpenMPS,MPSSum}, op; string=IdentityGate(1))
+    opLength = length(op)
     N = length(mps)
     vals = Array{ComplexF64,1}(undef, N + 1 - opLength)
     for site = 1:N+1-opLength
-        vals[site] = expectation_value(mps,op,site)
+        vals[site] = expectation_value(mps,op,site, string=string)
     end
     return vals
 end
-function expectation_values(mps::AbstractOpenMPS, op::Vector{T}) where {T}
+function expectation_values(mps::AbstractOpenMPS, op::Vector{T}; string=IdentityGate(1)) where {T}
     opLength = length(op)
     N = length(mps)
     @assert N == opLength + length(op[end])-1
     vals = Array{ComplexF64,1}(undef,N-length(op[end])+1)
     for site = 1:N-length(op[end])+1
-        vals[site] = expectation_value(mps,op[site],site)
+        vals[site] = expectation_value(mps,op[site],site; string=string)
     end
     return vals
 end
@@ -65,8 +72,8 @@ See also: [`connected_correlator`](@ref)
 """
 function correlator(mps::AbstractOpenMPS, op1, op2, k1::Integer, k2::Integer)
     N = length(mps.Γ)
-	oplength1 = operator_length(op1)
-	oplength2 = operator_length(op2)
+	oplength1 = length(op1)
+	oplength2 = length(op2)
 
 	emptytransfers = transfer_matrices(mps,:left)
 	op1transfers = map(site -> transfer_matrix(mps,op1,site,:left),1:N-oplength1+1)
@@ -100,18 +107,18 @@ function correlator(mps::AbstractOpenMPS, op1, op2, k1::Integer, k2::Integer)
 end
 function correlator(mps::AbstractOpenMPS,op1,op2) 
     N = length(mps.Γ)
-    oplength1 = operator_length(op1)
-	oplength2 = operator_length(op2)
+    oplength1 = length(op1)
+	oplength2 = length(op2)
     correlator(mps::OpenMPS,op1,op2,1,N+1-max(oplength1,oplength2))
 end
 function correlator(mps::AbstractOpenMPS,op)
     N = length(mps.Γ)
-    oplength = operator_length(op)
+    oplength = length(op)
     correlator(mps::OpenMPS,op,1,N+1-oplength)
 end
 function correlator(mps::AbstractOpenMPS, op, k1::Integer, k2::Integer)
     N = length(mps.Γ)
-	oplength = operator_length(op)
+	oplength = length(op)
 	emptytransfers = transfer_matrices(mps,:left)
 	optransfers = map(site -> transfer_matrix(mps,op,site,:left),1:N-oplength+1)
     function idR(n)
@@ -134,20 +141,20 @@ end
 
 function connected_correlator(mps::AbstractOpenMPS,op1,op2)
     N = length(mps.Γ)
-    oplength1 = operator_length(op1)
-	oplength2 = operator_length(op2)
+    oplength1 = length(op1)
+	oplength2 = length(op2)
     return connected_correlator(mps,op1,op2,1,N+1-max(oplength1,oplength2))
 end
 function connected_correlator(mps::AbstractOpenMPS,op)
     N = length(mps.Γ)
-    oplength = operator_length(op)
+    oplength = length(op)
     return connected_correlator(mps,op,1,N+1-oplength)
 end
 function connected_correlator(mps::AbstractOpenMPS, op1, op2, k1::Integer, k2::Integer)
     corr = correlator(mps,op1,op2,k1,k2)
     N = length(mps.Γ)
-    oplength1 = operator_length(op1)
-	oplength2 = operator_length(op2)
+    oplength1 = length(op1)
+	oplength2 = length(op2)
     ev1 = map(k->expectation_value(mps,op1,k), k1:k2)
     ev2 = map(k->expectation_value(mps,op2,k), k1:k2)
     concorr=zeros(ComplexF64,k2-k1+1,k2-k1+1)
@@ -166,7 +173,7 @@ end
 function connected_correlator(mps::AbstractOpenMPS, op, k1::Integer, k2::Integer)
     corr = correlator(mps,op,k1,k2)
     N = length(mps.Γ)
-    oplength = operator_length(op)
+    oplength = length(op)
     ev = pmap(k->expectation_value(mps,op,k), k1:k2)
     concorr=zeros(ComplexF64,k2-k1+1,k2-k1+1)
     for n1 in 1:(k2-k1+1-oplength)

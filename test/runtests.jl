@@ -19,7 +19,7 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     @test isunitary(op) == isunitary(g)
     @test isunitary(Gate(U))
 
-    id = IdentityGate;
+    id = IdentityGate(1);
     z = rand(ComplexF64)
     @test data(z*id) == z
     @test data(id*z) == z
@@ -45,9 +45,9 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     g2 = Gate(TensorNetworks.gate(kron(op,op),2));
     @test expectation_value([site,site],g2) ≈ expval^2
 
-    @test expectation_value([site], z*id) ≈ z
-    @test expectation_value([site,site], z*id) ≈ z
-    @test expectation_value([site,site,site], z*id) ≈ z
+    @test expectation_value([site], z*IdentityGate(1)) ≈ z
+    @test expectation_value([site,site], z*IdentityGate(2)) ≈ z
+    @test expectation_value([site,site,site], z*IdentityGate(3)) ≈ z
 
     D = 10;
     d = 2;
@@ -179,8 +179,8 @@ end
     @test transpose(Matrix(T)) ≈ Matrix(transfer_matrix(site,:right))
 
     z = rand(ComplexF64)
-    @test Matrix(T) ≈ Matrix(transfer_matrix(site,IdentityGate))
-    @test z*Matrix(T) ≈ Matrix(transfer_matrix(site,z*IdentityGate))
+    @test Matrix(T) ≈ Matrix(transfer_matrix(site,IdentityGate(1)))
+    @test z*Matrix(T) ≈ Matrix(transfer_matrix(site,z*IdentityGate(1)))
 
     @test idvec ≈ transfer_matrix(R)*idvec
     @test idvec ≈ transfer_matrix(L,:right)*idvec
@@ -265,17 +265,17 @@ end
     #Ground state energy of Ising CFT
     Nchain = 20
     Dmax = 10
-    ham = isingHamGates(Nchain,1,1,0)
-    hamMPO = IsingMPO(Nchain,1,1,0)
-    mps = canonicalize(identityOpenMPS(Nchain, 2, truncation = TruncationArgs(Dmax, 1e-12, true)))
-    states, betas = get_thermal_states(mps, ham, 30, .1, order=2)
-    energy = expectation_value(states[1],hamMPO)
+    ham = isingHamGates(Nchain,1,1,0);
+    hamMPO = IsingMPO(Nchain,1,1,0);
+    mps = canonicalize(identityOpenMPS(Nchain, 2, truncation = TruncationArgs(Dmax, 1e-12, true)));
+    states, betas = get_thermal_states(mps, ham, 30, .1, order=2);
+    energy = expectation_value(states[1],hamMPO);
     @test abs(energy/(Nchain-1) + 4/π) < 1/Nchain
 
-    ham = isingHamGates(Nchain,1,1,0)[2:3]
-    mps = canonicalize(identityUMPS(2, 2, truncation = TruncationArgs(Dmax, 1e-12, true)))
-    states, betas = get_thermal_states(mps, ham, 30, .1, order=2)
-    energy = (expectation_value(states[1],ham[1],1) + expectation_value(states[1],ham[2],2))/2
+    ham = isingHamGates(Nchain,1,1,0)[2:3];
+    mps = canonicalize(identityUMPS(2, 2, truncation = TruncationArgs(Dmax, 1e-12, true)));
+    states, betas = get_thermal_states(mps, ham, 30, .1, order=2);
+    energy = (expectation_value(states[1],ham[1],1) + expectation_value(states[1],ham[2],2))/2;
     @test abs(energy + 4/π) < 1/Nchain
 end
 
@@ -283,9 +283,9 @@ end
     #Test a few low lying eigenstates of a simple Ising
     Nchain = 5
     Dmax = 10
-    ham = IsingMPO(Nchain, 1, 0, 0)
-    mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax))
-    states, energies = eigenstates(ham, mps, 5; precision = 1e-8)
+    ham = IsingMPO(Nchain, 1, 0, 0);
+    mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax));
+    states, energies = eigenstates(ham, mps, 5; precision = 1e-8);
     @test sort(energies) ≈ -[Nchain-1, Nchain-1, Nchain-3, Nchain-3, Nchain-3]
 
     #Ground state energy of Ising CFT
@@ -294,7 +294,7 @@ end
     ham = IsingMPO(Nchain, 1, 1, 0)
     mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax))
     states, energies = eigenstates(ham, mps, 5; precision = 1e-8,alpha=1.0)
-    @test abs(energies[1]/(Nchain-1) + 4/π) < 1/Nchain
+    @test abs(energies[1]/(Nchain) + 4/π) < 1/Nchain
 end
 
 @testset "UMPS expectation values" begin

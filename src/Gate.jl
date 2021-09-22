@@ -1,9 +1,9 @@
 Base.size(g::AbstractGate) = size(g.data)
 Base.getindex(g::AbstractGate{T,N}, I::Vararg{Int,N}) where {T,N} = getindex(g.data,I...)
 # Base.setindex!(g::AbstractGate{T,N}, v, I::Vararg{Int,N}) where {T,N} = setindex!(g.data, v, I...)
-operator_length(op::AbstractGate) = length(op)
 Base.length(::AbstractSquareGate{T,N}) where {T,N} = Int(N/2)
 LinearAlgebra.ishermitian(gate::GenericSquareGate) = gate.ishermitian
+LinearAlgebra.ishermitian(gate::ScaledIdentityGate) = gate.ishermitian
 isunitary(gate::GenericSquareGate) = gate.isunitary
 isunitary(mat::AbstractArray{<:Number,2}) = mat'*mat ≈ one(mat) && mat*mat' ≈ one(mat)
 Base.complex(::Type{<:GenericSquareGate{T,N}}) where {T,N} = GenericSquareGate{complex(T),N}
@@ -12,8 +12,8 @@ Base.complex(::Type{<:GenericSquareGate{T,N}}) where {T,N} = GenericSquareGate{c
 #gateData(gate::AbstractGate) = AbstractGate.data
 #GenericSquareGate{T,N}(data::AbstractArray{K,N}) where {K,T,N} = GenericSquareGate{T,N}(convert.(T,data))
 
-Base.:*(x::K, g::ScaledIdentityGate) where {K<:Number} = ScaledIdentityGate(x*data(g))
-Base.:*(g::ScaledIdentityGate, x::K) where {K<:Number} = ScaledIdentityGate(x*data(g))
+Base.:*(x::K, g::ScaledIdentityGate) where {K<:Number} = ScaledIdentityGate(x*data(g), length(g))
+Base.:*(g::ScaledIdentityGate, x::K) where {K<:Number} = ScaledIdentityGate(x*data(g),length(g))
 Base.:*(x::K, g::GenericSquareGate) where {K<:Number} = GenericSquareGate(x*data(g))
 Base.:*(g::GenericSquareGate, x::K) where {K<:Number} = GenericSquareGate(x*data(g))
 Base.:/(g::GenericSquareGate, x::K) where {K<:Number} = inv(x)*g
@@ -23,18 +23,18 @@ function Base.:*(g1::GenericSquareGate{T,N},g2::GenericSquareGate{K,N}) where {T
 	Gate(gate(Matrix(g1)*Matrix(g2), Int(N/2)))
 end
 
-Base.:+(g1::GenericSquareGate, g2::GenericSquareGate) = GenericSquareGate(data(g1)+ data(g2))
-Base.:+(g1::ScaledIdentityGate, g2::ScaledIdentityGate) = ScaledIdentityGate(data(g1)+ data(g2))
-Base.:+(g1::ScaledIdentityGate, g2::GenericSquareGate) = data(g1)*one(data(g2))+ data(g2)
-Base.:+(g1::GenericSquareGate, g2::ScaledIdentityGate) = data(g2)*one(data(g1))+ data(g1)
+Base.:+(g1::GenericSquareGate{K,N}, g2::GenericSquareGate{T,N}) where {T,K,N} = GenericSquareGate(data(g1)+ data(g2))
+Base.:+(g1::ScaledIdentityGate{T,N}, g2::ScaledIdentityGate{K,N}) where {T,K,N} = ScaledIdentityGate(data(g1)+ data(g2),length(g1))
+Base.:+(g1::ScaledIdentityGate{T,N}, g2::GenericSquareGate{K,N}) where {T,K,N} = data(g1)*one(data(g2))+ data(g2)
+Base.:+(g1::GenericSquareGate{K,N}, g2::ScaledIdentityGate{T,N}) where {T,K,N} = data(g2)*one(data(g1))+ data(g1)
 
 Base.exp(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(exp(Matrix(g)), Int(N/2)))
-Base.exp(g::ScaledIdentityGate) = ScaledIdentityGate(exp(data(g)))
+Base.exp(g::ScaledIdentityGate{T,N}) where {T,N} = ScaledIdentityGate(exp(data(g)),length(g))
 
 
 Base.adjoint(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(Matrix(g)', Int(N/2)))
 
-Base.adjoint(g::ScaledIdentityGate) = ScaledIdentityGate(data(g)')
+Base.adjoint(g::ScaledIdentityGate) = ScaledIdentityGate(data(g)',length(g))
 Base.transpose(g::ScaledIdentityGate) = g
 # Base.:*(x::K, g::HermitianGate) where {K<:Real} = HermitianGate(x*g.data)
 # Base.:*(g::HermitianGate, x::K) where {K<:Real} = HermitianGate(x*g.data)
@@ -75,7 +75,7 @@ function Base.Matrix(g::GenericSquareGate)
     sg = size(g)
     l = length(g)
     D = *(sg[1:l]...)
-    reshape(g.data,D,D)
+    reshape(data(g),D,D)
 end
 # Base.Matrix(g::HermitianGate) = Matrix(g.data)
 function gate(matrix::AbstractMatrix ,sites::Integer)
@@ -106,107 +106,6 @@ auxillerate(gate::ScaledIdentityGate) = gate
 #     reshape(matrix, repeat([dim], sites))
 # end
 
-function transfer_matrix(sites::Vector{<:OrthogonalLinkSite}, op::AbstractGate, direction=:left)
-	if ispurification(sites[1])
-		op = auxillerate(op)
-	end
-	if direction==:left
-		sites = map(site->GenericSite(site,:right),sites)
-	elseif direction ==:right
-		sites = map(site->GenericSite(site,:left),sites)
-	end
-	transfer_matrix(sites, op, direction)
-end
-
-transfer_matrix(Γ::GenericSite, g::ScaledIdentityGate, direction::Symbol = :left) = data(g)*transfer_matrix(Γ,direction)
-
-function transfer_matrix(Γ::Vector{<:GenericSite}, gate::AbstractSquareGate{T_op,N_op}, direction = :left) where {T_op, N_op}
-    #op = gate.data
-    oplength = Int(N_op/2)
-	#opsize = size(op)
-	if direction == :left
-		Γnew = copy(reverse(Γ))
-		for k = 1:oplength
-			 Γnew[oplength+1-k] = permutedims(Γnew[oplength+1-k], [3,2,1])
-			 gate = permutedims(gate,[oplength:-1:1..., 2*oplength:-1:oplength+1...])
-		end
-	elseif direction == :right
-		Γnew = copy(Γ)
-	else
-		error("Specify :left or :right in transfer matrix calculation")
-	end
-    return transfer_right(Γnew, gate)
-end
-# transfer_right(Γ::Vector{GenericSite{T}}, gate::HermitianGate{T_op,N_op}) where {T,T_op,N_op} = transfer_right(Γ,gate.data)
-function transfer_right(Γ::Vector{<:GenericSite}, gate::GenericSquareGate{T_op,N_op}) where {T_op, N_op}
-	op = gate.data
-    oplength = Int(N_op/2)
-	@assert length(Γ) == oplength "Error in transfer_right: number of sites does not match gate length"
-	@assert size(gate,1) == size(Γ[1],2) "Error in transfer right: physical dimension of gate and site do not match"
-	perm = [Int(floor((k+1)/2))+ oplength*iseven(k) for k in 1:2*oplength]
-	opvec = vec(permutedims(op,perm))
-	s_start = size(Γ[1])[1]
-	s_final = size(Γ[oplength])[3]
-	function T_on_vec(invec)
-		v = reshape(invec,1,s_start,s_start)
-		for k in 1:oplength
-			@tensoropt (1,2) v[:] := conj(data(Γ[k])[1,-2,-4])* v[-1,1,2]* data(Γ[k])[2,-3,-5]
-			sv = size(v)
-			v = reshape(v,*(sv[1:3]...),sv[4],sv[5])
-		end
-		@tensor v[:] := v[1,-1,-2] * opvec[1]
-		return vec(v)
-	end
-	return LinearMap{ComplexF64}(T_on_vec,s_final^2,s_start^2)
-end
-
-"""
-    expectation_value(mps::AbstractMPS, op::AbstractGate, site::Integer)
-
-Return the expectation value of the gate starting at the `site`
-"""
-function expectation_value(mps::AbstractMPS, op::AbstractGate, site::Integer)
-    opLength = operator_length(op)
-    return expectation_value(mps[site:site+opLength-1], op)
-end
-# expectation_value(sites::AbstractMPS, ::IdentityGate) = expectation_value(mps[site:site+opLength-1], Ide)
-
-# function expectation_value(sites::Vector{GenericSite}, gate::AbstractSquareGate{T,N}) where {T,N}
-#     @assert length(sites) == N "Error in 'expectation value': length(sites) != length(gate)"
-#     transfer_matrix(sites,gate,:left)
-# end
-function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, gate::AbstractSquareGate) where {T}
-    @assert length(sites) == length(gate)
-    Λ = diagm(data(sites[1].Λ1) .^2)
-    transfer = transfer_matrix(sites,gate,:left)
-	DR = size(sites[end],3)
-    idR = vec(Matrix{T}(I,DR,DR ))
-    return vec(Λ)'*(transfer*idR)
-end
-function expectation_value(sites::Vector{GenericSite{T}}, gate::AbstractSquareGate) where {T}
-    @assert length(sites) == length(gate) "Error in 'expectation value': length(sites) != length(gate)"
-    transfer = transfer_matrix(sites,gate,:left)
-    DL = size(sites[1],1)
-    DR = size(sites[end],3)
-    idL = vec(Matrix{T}(I,DL,DL))'
-    idR = vec(Matrix{T}(I,DR,DR))
-    return idL*(transfer*idR)
-end
-function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, g::ScaledIdentityGate) where {T}
-    Λ = diagm(data(sites[1].Λ1) .^2)
-    transfer = transfer_matrix(sites,:left)
-	DR = size(sites[end],3)
-    idR = vec(Matrix{T}(I,DR,DR ))
-    return data(g) * (vec(Λ)'*(transfer*idR))
-end
-function expectation_value(sites::Vector{GenericSite{T}}, g::ScaledIdentityGate) where {T}
-	transfer = transfer_matrix(sites,:left)
-    DL = size(sites[1],1)
-    DR = size(sites[end],3)
-    idL = vec(Matrix{T}(I,DL,DL))'
-    idR = vec(Matrix{T}(I,DR,DR))
-    return data(g) * (idL*(transfer*idR))
-end
 
 # expectation_value(sites::Vector{<:GenericSite}, gate::HermitianGate) = real.(expectation_value(sites, gate.data))
 # expectation_value(sites::Vector{<:AbstractOrthogonalSite}, gate::AbstractSquareGate) = expectation_value(GenericSite.(sites), gate)

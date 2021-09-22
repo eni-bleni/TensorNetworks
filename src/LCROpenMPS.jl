@@ -220,32 +220,37 @@ transfer_matrix(mps::LCROpenMPS, site::Integer, direction=:left) = transfer_matr
 
 
 #%% Expectation values
-""" 
-    expectation_value(mps::LCROpenMPS, op::Array{T_op,N_op}, site::Integer)
+# """ 
+#     expectation_value(mps::LCROpenMPS, op::Array{T_op,N_op}, site::Integer)
 
-Return the expectation value of the gate starting at the `site`
-"""
-function expectation_value(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer) where {T_op, N_op}
-    opLength = operator_length(op)
+# Return the expectation value of the gate starting at the `site`
+# """
+# function expectation_value(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer) where {T_op, N_op}
+#     opLength = length(op)
+#     mps = set_center(mps, site)
+#     sites = GenericSite.(mps[site:(site+opLength-1)])
+#     expectation_value(sites, op)
+# end
+
+# """
+#     expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer)
+
+# Return the expectation value of the mpo starting at `site`
+
+# See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
+# """
+# function expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer = 1)
+#     oplength = length(mpo)
+#     T = transfer_matrix(mps,mpo,site,:right)
+#     dl = size(mps[site],1)
+#     dr = size(mps[site+oplength-1],3)
+#     L = T*vec(Matrix(1.0I,dl,dl))
+#     return tr(reshape(L,dr,dr))
+# end
+
+function expectation_value(mps::LCROpenMPS, op, site::Integer)
     mps = set_center(mps, site)
-    sites = GenericSite.(mps[site:(site+opLength-1)])
-    expectation_value(sites, op)
-end
-
-"""
-    expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer)
-
-Return the expectation value of the mpo starting at `site`
-
-See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
-"""
-function expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer = 1)
-    oplength = operator_length(mpo)
-    T = transfer_matrix(mps,mpo,site,:right)
-    dl = size(mps[site],1)
-    dr = size(mps[site+oplength-1],3)
-    L = T*vec(Matrix(1.0I,dl,dl))
-    return tr(reshape(L,dr,dr))
+    return expectation_value(mps,op,site, iscanonical=true)
 end
 
 """
@@ -290,20 +295,20 @@ function scalar_product(mps::LCROpenMPS, mps2::LCROpenMPS)
     return C[1, 1]
 end
 
-"""
-    transfer_matrix(mps::LCROpenMPS, op, site, direction = :left)
+# """
+#     transfer_matrix(mps::LCROpenMPS, op, site, direction = :left)
 
-Return the transfer matrix at `site` with the operator sandwiched
-"""
-function transfer_matrix(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
-	oplength = Int(length(size(op))/2)
-	N = length(mps)
-    if (site+oplength-1) >N
-        error("Operator goes outside the chain.")
-    end
-    Γ = mps[site:(site+oplength-1)]
-    return transfer_matrix(Γ,op,direction)
-end
+# Return the transfer matrix at `site` with the operator sandwiched
+# """
+# function transfer_matrix(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
+# 	oplength = Int(length(size(op))/2)
+# 	N = length(mps)
+#     if (site+oplength-1) >N
+#         error("Operator goes outside the chain.")
+#     end
+#     Γ = mps[site:(site+oplength-1)]
+#     return transfer_matrix(Γ,op,direction)
+# end
 
 # %% TEBD
 """
