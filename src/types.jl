@@ -12,14 +12,14 @@ struct ScaledIdentityGate{T,N} <: AbstractSquareGate{T,N}
     data::T
     ishermitian::Bool
     isunitary::Bool
-    function ScaledIdentityGate(scaling::T) where {T<:Number}
-        new{T,0}(scaling, isreal(scaling), scaling'*scaling ≈ 1)
+    function ScaledIdentityGate(scaling::T,n::Integer) where {T<:Number}
+        new{T,2*n}(scaling, isreal(scaling), scaling'*scaling ≈ 1)
     end
 end
-const IdentityGate = ScaledIdentityGate(true)
+const IdentityGate(n) = ScaledIdentityGate(true,n)
 
-Base.show(io::IO, g::ScaledIdentityGate) = print(io, ifelse(true ==data(g), "",string(data(g),"*")) ,"IdentityGate")
-Base.show(io::IO, ::MIME"text/plain", g::ScaledIdentityGate) = print(io, ifelse(true == data(g), "", string(data(g),"*")) ,"IdentityGate")
+Base.show(io::IO, g::ScaledIdentityGate{T,N}) where {T,N} = print(io, ifelse(true ==data(g), "",string(data(g),"*")), string("IdentityGate of length ", Int(N/2)))
+Base.show(io::IO, ::MIME"text/plain", g::ScaledIdentityGate) = print(io, ifelse(true == data(g), "", string(data(g),"*")), string("IdentityGate of length ", Int(N/2)))
 
 struct GenericSquareGate{T,N} <: AbstractSquareGate{T,N}
     data::Array{T,N}
@@ -197,3 +197,16 @@ mutable struct CentralUMPS{T<:Number} <: AbstractMPS
 	# Accumulated error
 	error::Float64
 end
+Base.eltype(::CentralUMPS{T}) where {T} = GenericSite{T}
+Base.eltype(::UMPS{T}) where {T} = OrthogonalLinkSite{T}
+Base.eltype(::LCROpenMPS{T}) where {T} = GenericSite{T}
+Base.eltype(::LROpenMPS{T}) where {T} = GenericSite{T}
+Base.eltype(::OpenMPS{T}) where {T} = OrthogonalLinkSite{T}
+
+struct MPSSum
+    states::Vector{Tuple{Number,AbstractMPS}}
+end
+Base.:+(mps1::Tuple{Number,AbstractMPS},mps2::Tuple{Number,AbstractMPS}) = MPSSum([mps1, mps2])
+Base.:+(mps1::Tuple{Number,AbstractMPS},sum::MPSSum) = MPSSum(vcat([mps1], sum.states))
+Base.:+(sum::MPSSum,mps1::Tuple{Number,AbstractMPS}) = MPSSum(vcat(sum.states, [mps1]))
+Base.length(mps::MPSSum) = length(mps.states[1][2])
