@@ -16,7 +16,7 @@ struct ScaledIdentityGate{T,N} <: AbstractSquareGate{T,N}
         new{T,2*n}(scaling, isreal(scaling), scaling'*scaling ≈ 1)
     end
 end
-const IdentityGate(n) = ScaledIdentityGate(true,n)
+IdentityGate(n) = ScaledIdentityGate(true,n)
 
 Base.show(io::IO, g::ScaledIdentityGate{T,N}) where {T,N} = print(io, ifelse(true ==data(g), "",string(data(g),"*")), string("IdentityGate of length ", Int(N/2)))
 Base.show(io::IO, ::MIME"text/plain", g::ScaledIdentityGate) = print(io, ifelse(true == data(g), "", string(data(g),"*")), string("IdentityGate of length ", Int(N/2)))
@@ -61,6 +61,9 @@ abstract type AbstractSite end
 abstract type AbstractOrthogonalSite <: AbstractSite end
 abstract type AbstractVirtualSite <: AbstractSite end
 
+struct ConjugateSite{T<:AbstractSite} <: AbstractSite
+    site::T
+end
 struct LinkSite{T<:Number} <: AbstractVirtualSite 
     Λ::Vector{T}
 end
@@ -89,6 +92,16 @@ end
 
 abstract type AbstractMPS end
 abstract type AbstractOpenMPS <: AbstractMPS end
+
+struct ConjugateMPS{T<:AbstractMPS} <: AbstractMPS
+    mps::T
+end
+Base.IndexStyle(::Type{<:ConjugateMPS}) = IndexLinear()
+Base.adjoint(mps::AbstractMPS) = ConjugateMPS(mps)
+Base.adjoint(mps::ConjugateMPS) = mps.mps
+Base.getindex(mps::ConjugateMPS, i::Integer) = getindex(mps.mps,i)'
+Base.length(mps::ConjugateMPS) = length(mps.mps)
+Base.lastindex(mps::ConjugateMPS) = lastindex(mps.mps)
 
 mutable struct OpenMPS{T} <: AbstractOpenMPS
     #In gamma-lambda notation

@@ -2,7 +2,7 @@ const DEFAULT_UMPS_DMAX = 20
 const DEFAULT_UMPS_TOL = 1e-12
 const DEFAULT_UMPS_NORMALIZATION = true
 const DEFAULT_UMPS_TRUNCATION = TruncationArgs(DEFAULT_UMPS_DMAX, DEFAULT_UMPS_TOL, DEFAULT_UMPS_NORMALIZATION)
-
+isinfinite(::UMPS) = true
 Base.firstindex(mps::UMPS) = 1
 Base.lastindex(mps::UMPS) = length(mps.Γ)
 Base.IndexStyle(::Type{UMPS}) = IndexLinear()

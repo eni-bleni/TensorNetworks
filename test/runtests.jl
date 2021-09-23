@@ -80,7 +80,93 @@ using Test, TensorNetworks, TensorOperations, LinearAlgebra
     gateaux = TensorNetworks.auxillerate(Gate(tens));
     @test data(gateaux) ≈ tensaux
 
+end
 
+@testset "MPOsite" begin
+    id = IdentityMPOsite
+    @test data(id)
+    z = rand(ComplexF64)
+    zid = z*id
+    @test data(zid) == z
+    @test zid[1,1,1,1] == z
+    @test zid[1,1,2,1] == 0
+    @test zid[1,2,2,1] == z
+    @test id*z == zid
+    @test transpose(zid) == zid
+    @test conj(zid) == conj(z)*id
+    @test id' == id
+    @test zid' == conj(z) * id
+
+    DL1,DL2,DR1,DR2,d = rand(1:10,5)
+    site1 = randomGenericSite(DL1,d,DR1);
+    site2 = randomGenericSite(DL2,d,DR2);
+    T0 = Matrix(transfer_matrix(site1',site2));
+    Tid = Matrix(transfer_matrix(site1',id,site2));
+    @test T0 == Tid
+    @test Matrix(transfer_matrix(site1)) == Matrix(transfer_matrix(site1,id))
+    @test z*T0 == Matrix(transfer_matrix(site1',zid,site2))
+end
+
+@testset "MPO" begin
+    N = 10
+    id = IdentityMPO(N)
+    @test length(id) == N
+    z = rand(ComplexF64)
+    zid = z*id
+    @test zid.data == z
+    @test zid == id*z
+
+    idsite = IdentityMPOsite
+    @test idsite == id[floor(Int, N/2)]
+    @test z^(1/N)*idsite == zid[floor(Int, N/2)]
+
+    mps = randomOpenMPS(N,2,5);
+    T0 = Matrix(transfer_matrix(mps))
+    @test T0 == Matrix(transfer_matrix(mps,id))
+    @test z*T0 ≈ Matrix(transfer_matrix(mps,zid))
+
+end
+
+
+@testset "Environment" begin
+    N = 10
+    d = 2
+    mps = randomOpenMPS(N,d,1);
+    env = environment(mps);
+    @test length(env.L) == N == length(env.R)
+    @test env.L ≈ fill([1.0], N) ≈ env.R
+    
+    D = 5
+    mps = randomOpenMPS(N,d,D);
+    env = environment(mps);
+    site = randomGenericSite(D,d,D)
+    mid = floor(Int,N/2)
+    update_environment!(env,mid,site',site)
+    TL = transfer_matrix(site,:left)
+    TR = transfer_matrix(site,:right)
+    @test vec(env.R[mid-1]) ≈ TL*vec(env.R[mid])
+    @test vec(env.L[mid+1]) ≈ TR*vec(env.L[mid])
+
+    D2 = 10
+    mps2 = randomOpenMPS(N,d,D2);
+    env = environment(mps2',mps);
+    @test length(env.R[mid]) == D2*D == length(env.L[mid])
+    site2 = randomGenericSite(D2,d,D2);
+    update_environment!(env,mid,site2',site)
+    TL = transfer_matrix(site2',site,:left)
+    TR = transfer_matrix(site2',site,:right)
+    @test vec(env.R[mid-1]) ≈ TL*vec(env.R[mid])
+    @test vec(env.L[mid+1]) ≈ TR*vec(env.L[mid])
+
+    mpo = IsingMPO(N,1,1,1);
+    Dmpo = size(mpo[mid],4)
+    env = environment(mps2',mpo,mps);
+    @test length(env.R[mid]) == D2*D*Dmpo == length(env.L[mid])
+    update_environment!(env,mid,site2',mpo[mid],site)
+    TL = transfer_matrix(site2',mpo[mid],site,:left)
+    TR = transfer_matrix(site2',mpo[mid],site,:right)
+    @test vec(env.R[mid-1]) ≈ TL*vec(env.R[mid])
+    @test vec(env.L[mid+1]) ≈ TR*vec(env.L[mid])
 end
 
 @testset "Canonicalize" begin
@@ -173,7 +259,7 @@ end
     LR = randomOrthogonalLinkSite(D,d,D);
     id = Matrix{ComplexF64}(I,D,D);
     idvec = vec(id);
-    T = transfer_matrix(site,:left)
+    T = transfer_matrix(site, :left)
     @test size(T) == (D^2,D^2)
     @test Matrix(T') ≈ Matrix(T)'
     @test transpose(Matrix(T)) ≈ Matrix(transfer_matrix(site,:right))
@@ -187,24 +273,45 @@ end
     @test idvec ≈ transfer_matrix(LR,:right)*idvec
     @test idvec ≈ transfer_matrix(LR,:left)*idvec
     
-    T1 = transfer_matrix(site,sz);
+    T1 = transfer_matrix(site,MPOsite(sz));
     @test size(T1) == (D^2,D^2)
-    @test Matrix(T1') ≈ Matrix(T1)'
+    #@test Matrix(T1') ≈ Matrix(T1)'
 
     g2 = Gate(TensorNetworks.gate(kron(sz,sz),2));
-    T2 = transfer_matrix([site,site], g2);
+    T2 = transfer_matrix((site,site), g2);
     @test Matrix(T2) ≈ Matrix(T1*T1)
     @test transpose(Matrix(T2)) ≈ Matrix(transfer_matrix([site,site], g2,:right))
 
     g3 = Gate(TensorNetworks.gate(kron(sz,sz,sz),3));
-    T3 = transfer_matrix([site,site,site], g3);
+    T3 = transfer_matrix((site,site,site), g3);
     @test Matrix(T3) ≈ Matrix(T1*T1*T1)
+    @test Matrix(T3) ≈ Matrix(transfer_matrix([site,site,site], [sz,sz,sz]))
+    @test Matrix(T3) ≈ Matrix(transfer_matrix([site',site',site'], [sz,sz,sz], [site,site,site]))
     @test transpose(Matrix(T3)) ≈ Matrix(transfer_matrix([site,site,site], g3,:right))
 
     g4 = Gate(TensorNetworks.gate(kron(sz,sz,sz,sz),4));
     T4 = transfer_matrix([site,site,site,site], g4);
     @test Matrix(T4) ≈ Matrix(T1*T1*T1*T1)
     @test transpose(Matrix(T4)) ≈ Matrix(transfer_matrix([site,site,site,site], g4,:right))
+
+    #T4mpo = transfer_matrix((site',sz,site), g4);
+
+    # D = 10
+    # d = 5
+    # v = rand(D^2*d);
+    # site = randomGenericSite(D,d,D);
+    # A = data(site);
+    # A4 = reshape(A,D,d,1,D);
+    # cA4 = conj(reshape(A,D,1,d,D));
+    # mpo = MPOsite(rand(ComplexF64,d,d,d,d));
+
+    # T0 = TensorNetworks.transfer_left(A,mpo,A)
+    # T4 = TensorNetworks.transfer_left(cA4,data(mpo),A4)
+    # T42 = transfer_matrix(cA4,data(mpo),A4,:left)
+    # @test T0*v ≈ vec(T4*v)
+    # @test Matrix(T4') ≈ Matrix(T4)'
+    # @time T0*v;
+    # @time T4*v;
 end
 
 @testset "Compression" begin
@@ -291,9 +398,9 @@ end
     #Ground state energy of Ising CFT
     Nchain = 20
     Dmax = 20
-    ham = IsingMPO(Nchain, 1, 1, 0)
-    mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax))
-    states, energies = eigenstates(ham, mps, 5; precision = 1e-8,alpha=1.0)
+    ham = IsingMPO(Nchain, 1, 1, 0);
+    mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax));
+    states, energies = eigenstates(ham, mps, 5; precision = 1e-8,alpha=1.0);
     @test abs(energies[1]/(Nchain) + 4/π) < 1/Nchain
 end
 

@@ -93,22 +93,22 @@ function expectation_value(sites::Vector{GenericSite{T}}, gate::AbstractSquareGa
     idR = vec(Matrix{T}(I, DR, DR))
     return idL * (transfer * idR)
 end
-function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, g::ScaledIdentityGate{K,N}) where {T,K,N}
-    @assert N == length(sites) "Error in expectation_value: "
-    Λ = Diagonal(data(sites[1].Λ1).^2)
-    transfer = transfer_matrix(sites, :left)
-    DR = size(sites[end], 3)
-    idR = vec(Matrix{T}(I, DR, DR))
-    return data(g) * (vec(Λ)' * (transfer * idR))
-end
-function expectation_value(sites::Vector{GenericSite{T}}, g::ScaledIdentityGate) where {T}
-    transfer = transfer_matrix(sites, :left)
-    DL = size(sites[1], 1)
-    DR = size(sites[end], 3)
-    idL = vec(Matrix{T}(I, DL, DL))'
-    idR = vec(Matrix{T}(I, DR, DR))
-    return data(g) * (idL * (transfer * idR))
-end
+# function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, g::ScaledIdentityGate{K,N}) where {T,K,N}
+#     @assert N == length(sites) "Error in expectation_value: "
+#     Λ = Diagonal(data(sites[1].Λ1).^2)
+#     transfer = transfer_matrix(sites, :left)
+#     DR = size(sites[end], 3)
+#     idR = vec(Matrix{T}(I, DR, DR))
+#     return data(g) * (vec(Λ)' * (transfer * idR))
+# end
+# function expectation_value(sites::Vector{GenericSite{T}}, g::ScaledIdentityGate) where {T}
+#     transfer = transfer_matrix(sites, :left)
+#     DL = size(sites[1], 1)
+#     DR = size(sites[end], 3)
+#     idL = vec(Matrix{T}(I, DL, DL))'
+#     idR = vec(Matrix{T}(I, DR, DR))
+#     return data(g) * (idL * (transfer * idR))
+# end
 
 
 # """

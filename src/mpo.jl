@@ -1,10 +1,14 @@
 #TODO compress MPO https://arxiv.org/pdf/1611.02498.pdf
+abstract type AbstractMPOsite{T} <: AbstractArray{T,4} end
 
-struct MPOsite{T<:Number} <: AbstractArray{T,4}
+struct MPOsite{T<:Number} <: AbstractMPOsite{T}
     data::Array{T,4}
     # ishermitian::Bool
     # isunitary::Bool
 end
+Base.getindex(g::MPOsite, I::Vararg{Int,4}) = getindex(data(g),I...)
+
+
 function MPOsite(op::Array{<:Number,2})
     sop = size(op)
     return MPOsite(reshape(op,1,sop[1],sop[2],1))
@@ -16,7 +20,7 @@ end
 #     return MPOsite(op, norm(op - conj(permutedims(op,[1,3,2,4]))) ≈ 0)
 # end
 data(site::MPOsite) = site.data
-Base.eltype(site::MPOsite{T}) where {T} = T
+Base.eltype(::MPOsite{T}) where {T} = T
 # LinearAlgebra.ishermitian(site::MPOsite) = site.ishermitian
 # isunitary(site::MPOsite) = site.isunitary
 reverse_direction(site::MPOsite) = MPOsite(permutedims(data(site),[4,2,3,1]))
@@ -31,6 +35,68 @@ struct MPO{T<:Number} <: AbstractMPO{T}
     data::Vector{MPOsite{T}}
 end
 
+struct ScaledIdentityMPOsite{T} <: AbstractMPOsite{T}
+    data::T
+    function ScaledIdentityMPOsite(scaling::T) where {T<:Number}
+        new{T}(scaling)
+    end
+end
+data(site::ScaledIdentityMPOsite) = site.data
+const IdentityMPOsite = ScaledIdentityMPOsite(true)
+
+Base.length(mpo::ScaledIdentityMPOsite) = 1
+function Base.size(::ScaledIdentityMPOsite, i::Integer)
+    if i==1 || i==4
+        return 1
+    else 
+        @error "Physical dimension of ScaledIdentityMPOsite is arbitrary"
+    end
+end
+LinearAlgebra.ishermitian(mpo::ScaledIdentityMPOsite) = isreal(mpo.data)
+isunitary(mpo::ScaledIdentityMPOsite) = mpo.data'*mpo.data ≈ 1
+Base.:*(x::K, g::ScaledIdentityMPOsite) where {K<:Number} = ScaledIdentityMPOsite(x*data(g))
+Base.:*(g::ScaledIdentityMPOsite, x::K) where {K<:Number} = ScaledIdentityMPOsite(x*data(g))
+Base.:/(g::ScaledIdentityMPOsite, x::K) where {K<:Number} = inv(x)*g
+auxillerate(mpo::ScaledIdentityMPOsite) = mpo
+Base.show(io::IO, g::ScaledIdentityMPOsite) = print(io, ifelse(true == data(g), "",string(data(g),"*")), string("IdentityMPOsite"))
+Base.show(io::IO, ::MIME"text/plain", g::ScaledIdentityMPOsite) = print(io, ifelse(true == data(g), "", string(data(g),"*")), string("IdentityMPOsite"))
+
+reverse_direction(site::ScaledIdentityMPOsite) = site
+Base.transpose(site::ScaledIdentityMPOsite) = site
+Base.adjoint(site::ScaledIdentityMPOsite) = conj(site)
+Base.conj(site::ScaledIdentityMPOsite) = ScaledIdentityMPOsite(conj(data(site)))
+Base.:+(site1::ScaledIdentityMPOsite, site2::ScaledIdentityMPOsite) = ScaledIdentityMPOsite(data(site1) + data(site2)) 
+
+Base.:(==)(mpo1::ScaledIdentityMPOsite, mpo2::ScaledIdentityMPOsite) = data(mpo1) == data(mpo2)
+
+function Base.getindex(g::ScaledIdentityMPOsite, I::Vararg{Int,4}) 
+    @assert I[1] == I[4] == 1 "Accessing out of bounds index on ScaledIdentityMPOsite "
+    val = I[2] == I[3] ? 1 : 0
+    return data(g)*val
+end
+
+struct ScaledIdentityMPO{T} <: AbstractMPO{T}
+    data::T
+    length::UInt32
+    function ScaledIdentityMPO(scaling::T,n::Integer) where {T<:Number}
+        new{T}(scaling,n)
+    end
+end
+Base.IndexStyle(::Type{<:ScaledIdentityMPO}) = IndexLinear()
+Base.getindex(g::ScaledIdentityMPO, i::Integer) = g.data^(1/length(g)) *IdentityMPOsite
+data(g::ScaledIdentityMPO) = g.data
+
+IdentityMPO(n) = ScaledIdentityMPO(true,n)
+Base.length(mpo::ScaledIdentityMPO) = mpo.length
+LinearAlgebra.ishermitian(mpo::ScaledIdentityMPO) = isreal(mpo.data)
+isunitary(mpo::ScaledIdentityMPO) = mpo.data'*mpo.data ≈ 1
+Base.:*(x::K, g::ScaledIdentityMPO) where {K<:Number} = ScaledIdentityMPO(x*data(g), length(g))
+Base.:*(g::ScaledIdentityMPO, x::K) where {K<:Number} = ScaledIdentityMPO(x*data(g), length(g))
+Base.:/(g::ScaledIdentityMPO, x::K) where {K<:Number} = inv(x)*g
+Base.show(io::IO, g::ScaledIdentityMPO) = print(io, ifelse(true ==data(g), "",string(data(g),"*")), string("IdentityMPO of length ", length(g)))
+Base.show(io::IO, ::MIME"text/plain", g::ScaledIdentityMPO) = print(io, ifelse(true == data(g), "", string(data(g),"*")), string("IdentityMPO of length ", length(g)))
+
+Base.:(==)(mpo1::ScaledIdentityMPO, mpo2::ScaledIdentityMPO) = data(mpo1) == data(mpo2) && length(mpo1) == length(mpo2)
 # struct HermitianMPO{T<:Number} <: AbstractMPO{T}
 #     data::MPO{T}
 #     function HermitianMPO(mpo::MPO{T}) where {T}

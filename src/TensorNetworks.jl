@@ -30,10 +30,12 @@ export isleftcanonical, isrightcanonical, data, isunitary
 export scalar_product, set_center, set_center!, entanglement_entropy
 export entanglement_entropy, IdentityGate, data, compress, qubit
 export randomRightOrthogonalSite, randomLeftOrthogonalSite, randomOrthogonalLinkSite, randomGenericSite
+export IdentityMPOsite, environment, update_environment!
 
 include("types.jl")
 include("pauli.jl")
 include("mpo.jl")
+include("environment.jl")
 include("mps.jl")
 include("MPSsite.jl")
 include("Gate.jl")

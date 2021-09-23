@@ -1,3 +1,5 @@
+isinfinite(::AbstractOpenMPS) = false
+isinfinite(::ConjugateMPS{<:AbstractOpenMPS}) = false
 """
     canonicalize(mps::AbstractOpenMPS, n)
 
@@ -20,16 +22,16 @@ function canonicalize!(mps::AbstractOpenMPS,n)
         apply_identity_layer!(mps)
     end
 end
-function boundary(mps::AbstractOpenMPS, side)
+function boundary(mps::Union{AbstractOpenMPS,ConjugateMPS{<:AbstractOpenMPS}}, side)
     if side==:left
         [one(eltype(mps[1]))]
     elseif side==:right
         [one(eltype(mps[end]))]
     end
 end
-boundary(mps1::AbstractOpenMPS,mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
-boundary(mps::AbstractOpenMPS,mpo::AbstractMPO,side) = boundary(mps,side)
-boundary(mps1::AbstractOpenMPS,mpo::AbstractMPO, mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
+boundary(mps1::ConjugateMPS{<:AbstractOpenMPS},mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
+boundary(mps::AbstractOpenMPS, mpo::AbstractMPO,side) = boundary(mps,side)
+boundary(mps1::ConjugateMPS{<:AbstractOpenMPS},mpo::AbstractMPO, mps2::AbstractOpenMPS,side) = kron(boundary(mps1,side), boundary(mps2,side))
 
 transfer_matrix_bond(mps::AbstractOpenMPS, site::Integer,dir::Symbol) = I
 transfer_matrix_bond(mps1::AbstractOpenMPS,mps2::AbstractOpenMPS, site::Integer,dir::Symbol) = I
