@@ -4,9 +4,9 @@ expectation_value(mps::AbstractOpenMPS, op::AbstractGate, site::Integer; iscanon
 
 Return the expectation value of the gate starting at `site`
 """
-function expectation_value(mps::AbstractMPS, op, site::Integer; iscanonical=false, string=IdentityGate(1)) #FIXME  For UMPS, this misses a factor of Λ 
+function expectation_value(mps::AbstractMPS, op, site::Integer; iscanonical=false, string=IdentityMPOsite) 
     n = length(op)
-    if !iscanonical || string != IdentityGate(1)
+    if !iscanonical || string != IdentityMPOsite
         L = Array(vec(boundary(mps,:left)))
         R = Array(vec(boundary(mps,:right)))
         for k in 1:site - 1
@@ -23,7 +23,7 @@ function expectation_value(mps::AbstractMPS, op, site::Integer; iscanonical=fals
     end
 end
 
-function expectation_value(mps::AbstractMPS, mpo::AbstractMPO) #FIXME For UMPS, this misses a factor of Λ 
+function expectation_value(mps::AbstractMPS, mpo::AbstractMPO) 
     @assert length(mps) == length(mpo)
     L = vec(boundary(mps,mpo,:left) )
     R = vec(boundary(mps,mpo,:right))
@@ -32,7 +32,7 @@ function expectation_value(mps::AbstractMPS, mpo::AbstractMPO) #FIXME For UMPS, 
     return (Tc*(T*R))'*L
 end
 
-function matrix_element(mps1::AbstractMPS, op, mps2::AbstractMPS, site::Integer; string=IdentityGate(1))
+function matrix_element(mps1::AbstractMPS, op, mps2::AbstractMPS, site::Integer; string=IdentityMPOsite)
     n = length(op)
     L = boundary(mps1, mps2, :left)
     R = boundary(mps1, mps2, :right)
@@ -47,7 +47,7 @@ function matrix_element(mps1::AbstractMPS, op, mps2::AbstractMPS, site::Integer;
     return transpose(Tc*(T* R))*L
 end
 
-function expectation_value(mps::MPSSum, op, site::Integer; string=IdentityGate(1))
+function expectation_value(mps::MPSSum, op, site::Integer; string=IdentityMPOsite)
     #FIXME define matrix_element. Decide if "site" argument should be included or not. Decide on gate or mpo
     #Define alias Operator as Union{(MPOsite, site), MPO, Gate, Gates}?
     
@@ -57,13 +57,13 @@ function expectation_value(mps::MPSSum, op, site::Integer; string=IdentityGate(1
     isherm = ishermitian(op) && ishermitian(string) #Save some computational time?
     for n in 1:N
         for k in n:N
-            m = states[n][1]*states[k][1]*matrix_element(states[n][2], op, states[k][2], site; string=string)
+            m = conj(states[n][1])*states[k][1]*matrix_element(states[n][2]', op, states[k][2], site; string=string)
             if k==n
                 res += m
             elseif isherm
                 res += 2*real(m)
             else
-                res += m + states[n][1]*states[k][1]*matrix_element(states[n][2], op, states[k][2], site; string=string)
+                res += m + conj(states[k][1])*states[n][1]*matrix_element(states[k][2]', op, states[n][2], site; string=string)
             end
         end
     end
@@ -76,6 +76,8 @@ end
 #     @assert length(sites) == N "Error in 'expectation value': length(sites) != length(gate)"
 #     transfer_matrix(sites,gate,:left)
 # end
+
+
 function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, gate::AbstractSquareGate) where {T}
     @assert length(sites) == length(gate)
     Λ = Diagonal(data(sites[1].Λ1).^2)
@@ -93,30 +95,3 @@ function expectation_value(sites::Vector{GenericSite{T}}, gate::AbstractSquareGa
     idR = vec(Matrix{T}(I, DR, DR))
     return idL * (transfer * idR)
 end
-# function expectation_value(sites::Vector{OrthogonalLinkSite{T}}, g::ScaledIdentityGate{K,N}) where {T,K,N}
-#     @assert N == length(sites) "Error in expectation_value: "
-#     Λ = Diagonal(data(sites[1].Λ1).^2)
-#     transfer = transfer_matrix(sites, :left)
-#     DR = size(sites[end], 3)
-#     idR = vec(Matrix{T}(I, DR, DR))
-#     return data(g) * (vec(Λ)' * (transfer * idR))
-# end
-# function expectation_value(sites::Vector{GenericSite{T}}, g::ScaledIdentityGate) where {T}
-#     transfer = transfer_matrix(sites, :left)
-#     DL = size(sites[1], 1)
-#     DR = size(sites[end], 3)
-#     idL = vec(Matrix{T}(I, DL, DL))'
-#     idR = vec(Matrix{T}(I, DR, DR))
-#     return data(g) * (idL * (transfer * idR))
-# end
-
-
-# """
-#     expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer)
-
-# Return the expectation value of the local `mpo` at `site`
-# """
-# expectation_value(mps::AbstractOpenMPS, mpo::MPOsite, site::Integer) = expectation_value(mps, MPO(mpo), site)
-
-
-

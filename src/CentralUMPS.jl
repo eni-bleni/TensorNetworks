@@ -1,4 +1,4 @@
-function CentralUMPS(mps::UMPS) where {T}
+function CentralUMPS(mps::UMPS)
     mps = canonicalize(mps)
     n = length(mps)
     ΓL = [GenericSite(mps[k],:left) for k in 1:n]

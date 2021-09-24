@@ -294,24 +294,6 @@ end
     @test Matrix(T4) ≈ Matrix(T1*T1*T1*T1)
     @test transpose(Matrix(T4)) ≈ Matrix(transfer_matrix([site,site,site,site], g4,:right))
 
-    #T4mpo = transfer_matrix((site',sz,site), g4);
-
-    # D = 10
-    # d = 5
-    # v = rand(D^2*d);
-    # site = randomGenericSite(D,d,D);
-    # A = data(site);
-    # A4 = reshape(A,D,d,1,D);
-    # cA4 = conj(reshape(A,D,1,d,D));
-    # mpo = MPOsite(rand(ComplexF64,d,d,d,d));
-
-    # T0 = TensorNetworks.transfer_left(A,mpo,A)
-    # T4 = TensorNetworks.transfer_left(cA4,data(mpo),A4)
-    # T42 = transfer_matrix(cA4,data(mpo),A4,:left)
-    # @test T0*v ≈ vec(T4*v)
-    # @test Matrix(T4') ≈ Matrix(T4)'
-    # @time T0*v;
-    # @time T4*v;
 end
 
 @testset "Compression" begin

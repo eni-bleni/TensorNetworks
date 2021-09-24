@@ -5,11 +5,12 @@ Evolve the state using TEBD
 
 See also: [`get_thermal_states`](@ref)
 """
-function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_order=2)
+function TEBD!(mps::AbstractMPS, ham; total_time, steps, increment, observables, trotter_order=2)
     dt = total_time/steps
     err=Array{Float64,1}(undef, steps);
     layers = prepare_layers(mps,ham,dt,trotter_order)
-	data = DataFrame()
+	# data = DataFrame()
+	data = Dict([(name,[]) for (name, obs) in pairs(observables)])
     for counter = 1:steps
 		if counter % increment == 1 || increment==1
             println("step ",counter," / ",steps, "\n Dim ",maximum(length.(mps.Λ)))
@@ -17,9 +18,10 @@ function TEBD!(mps, ham; total_time, steps, increment, observables, trotter_orde
 			vals["time"] = counter*dt
 			vals["error"] = mps.error
 			for (name, obs) in pairs(observables)
-				vals[name] = [obs(mps)]
+				# vals[name] = [obs(mps)]
+				push!(data[name],obs(mps))
 			end
-			append!(data, vals)
+			# append!(data, vals)
         end
         err[counter] = apply_layers!(mps,layers)
     end
@@ -162,10 +164,6 @@ function frgates(dt,gates::Vector{<:AbstractSquareGate})
    times = [theta/2 theta (1-theta)/2 (1-2*theta)]
    exponentiate(t) = [exp(t*1im*dt*g) for g in gates]
    W[1:4] = exponentiate.(times)
-   # W[1] = map(x->exp(-theta*1im/2*dt*x),blocks)
-   # W[2] = map(x->exp(-theta*1im*dt*x),blocks)
-   # W[3] = map(x->exp(-(1-theta)*1im/2*dt*x),blocks)
-   # W[4] = map(x->exp(-(1-2*theta)*1im*dt*x),blocks)
    W[5] = W[3]
    W[6] = W[2]
    W[7] = W[1]

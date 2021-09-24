@@ -265,8 +265,6 @@ function to_right_orthogonal(M::Vector{GenericSite{T}}; method=:qr) where {T}
     return out, G
 end
 
-
-
 function GenericSite(site::OrthogonalLinkSite, direction = :left)
 	if direction==:left
 		return site.Λ1*site.Γ
@@ -274,17 +272,6 @@ function GenericSite(site::OrthogonalLinkSite, direction = :left)
 		return site.Γ*site.Λ2
 	end
 end
-
-# function absorb_on(site::OrthogonalLinkSite{T}, direction = :left) where {T}
-# 	if direction==:left
-# 		return GenericSite{T}(absorb_l(site.Γ, site.Λ1, :left), site.purification)
-# 	elseif direction==:right
-# 		return GenericSite{T}(absorb_l(site.Γ, site.Λ2, :right), site.purification)
-# 	end
-# end
-absorb(site::OrthogonalLinkSite) = GenericSite(absorb_l(site.Λ1, site.Γ, site.Λ2), site.purification)
-
-# expectation_value(site::OrthogonalLinkSite, mpo::MPOsite) = expectation_value(absorb(site),mpo)
 
 function ΓΛ(sites::Vector{OrthogonalLinkSite{T}}) where {T}
 	N = length(sites)

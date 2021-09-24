@@ -35,7 +35,8 @@ boundary(mps1::ConjugateMPS{<:AbstractOpenMPS},mpo::AbstractMPO, mps2::AbstractO
 
 transfer_matrix_bond(mps::AbstractOpenMPS, site::Integer,dir::Symbol) = I
 transfer_matrix_bond(mps1::AbstractOpenMPS,mps2::AbstractOpenMPS, site::Integer,dir::Symbol) = I
-
+transfer_matrix_bond(mps::ConjugateMPS{<:AbstractOpenMPS}, site::Integer,dir::Symbol) = I
+transfer_matrix_bond(mps1::ConjugateMPS{<:AbstractOpenMPS},mps2::AbstractOpenMPS, site::Integer,dir::Symbol) = I
 
 """
     expectation_values(mps::AbstractOpenMPS, op)
@@ -44,7 +45,7 @@ Return a list of expectation values on every site
 
 See also: [`expectation_value`](@ref)
 """
-function expectation_values(mps::Union{AbstractOpenMPS,MPSSum}, op; string=IdentityGate(1))
+function expectation_values(mps::Union{AbstractOpenMPS,MPSSum}, op; string=IdentityMPOsite)
     opLength = length(op)
     N = length(mps)
     vals = Array{ComplexF64,1}(undef, N + 1 - opLength)
@@ -53,7 +54,7 @@ function expectation_values(mps::Union{AbstractOpenMPS,MPSSum}, op; string=Ident
     end
     return vals
 end
-function expectation_values(mps::AbstractOpenMPS, op::Vector{T}; string=IdentityGate(1)) where {T}
+function expectation_values(mps::AbstractOpenMPS, op::Vector{T}; string=IdentityMPOsite) where {T}
     opLength = length(op)
     N = length(mps)
     @assert N == opLength + length(op[end])-1

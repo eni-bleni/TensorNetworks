@@ -117,7 +117,7 @@ update_environment!(env::AbstractFiniteEnvironment, mps::AbstractSite, site::Int
 # end
 
 
-function local_mul(envL,envR,mposite::AbstractMPOsite,tensor::GenericSite)
+function local_mul(envL,envR,mposite::AbstractMPOsite,tensor::GenericSite) #TODO Check type stability
     #@tensoropt (-1,4,6,-3) temp[:] := HL[-1,1,4]* mposite[1,-2,5,2] *tensor[4,5,6]*HR[-3,2,6]
     # lm,_,_,rm = size(mposite)
     # DL,_,DR = size(tensor)

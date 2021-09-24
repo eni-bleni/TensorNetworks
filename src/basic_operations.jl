@@ -45,38 +45,6 @@ function split_truncate!(theta, args::TruncationArgs)
 end
 
 
-"""
-	absorb_l!
-
-Absorb the link tensor into the main tensor
-"""
-function absorb_l!(gout, l::Vector{<:Number}, g)
-    sg=size(g)
-	gout .= reshape(l,sg[1],1,1) .* g
-end
-function absorb_l!(gout,g , l::Vector{<:Number})
-    sg=size(g)
-	gout .= g .* reshape(l,1,1,sg[3])
-end
-function absorb_l!(gout,ll,g,lr)
-    sg=size(g)
-	gout .= reshape(ll,sg[1],1,1) .* g .*reshape(lr,1,1,sg[3])
-end
-
-function absorb_l(ll::Vector{<:Number},g,lr::Vector{<:Number})
-    sg=size(g)
-	return reshape(ll,sg[1],1,1) .* g .*reshape(lr,1,1,sg[3])
-end
-function absorb_l(g,l,dir::Symbol=:left)
-    sg=size(g)
-    if dir == :left
-		s = reshape(l,sg[1],1,1)
-    elseif dir==:right
-		s = reshape(l,1,1,sg[3])
-    end
-    return g .* s
-end
-
 function isleftcanonical(data)
 	@tensor id[:] := conj(data[1,2,-1])*data[1,2,-2]
 	return id ≈ one(id)

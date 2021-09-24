@@ -9,14 +9,11 @@ function DMRG(mpo::AbstractMPO, mps_input::LCROpenMPS{T}, orth::Vector{LCROpenMP
     mps = deepcopy(mps_input)
     #canonicalize!(mps)
     L = length(mps_input)
-    Lorth = length(orth) 
     @assert ((norm(mps_input) ≈ 1) && L == length(mpo)) "ERROR in DMRG: non-normalized MPS as input or wrong length"
     set_center!(mps,1)
     direction = :right
     Henv = environment(mps,mpo)
     orthenv = [environment(state',mps) for state in orth]
-    # HL, HR = initializeHLR(mps,mpo)
-    # CL, CR = initializeCLR(mps,orth)
     Hsquared = multiplyMPOs(mpo,mpo)
     E, H2 = real(expectation_value(mps, mpo)), real(expectation_value(mps, Hsquared))
     var = H2 - E^2
@@ -48,34 +45,16 @@ end
 
 
 function effective_hamiltonian(mposite, hl,hr, orthTensors)
-    # lm,_,d,rm = size(mposite)
     szmps = (size(hl,3),size(mposite,3),size(hr,3))
     function f(v) 
         A = reshape(v, szmps)
         HA = local_mul(hl,hr,mposite,A)
-        # HA = HeffMult(A, data(mposite),hl,hr)
-        
         overlap(o) = 100*conj(o)*(transpose(vec(o))*v)
         OA = sum(overlap, orthTensors; init = zero(A))
-        # for k = 1:length(orthTensors)
-        #     #@tensor overlap[:] := orthTensors[k][1,2,3]*A[1,2,3]
-        #     overlap = transpose(vec(orthTensors[k]))*Avec
-        #     Aout += 100*conj(orthTensors[k]) * overlap #TODO make the weight choosable
-        # end
-        #return vec(Aout)
         return vec(HA + OA)
     end
     return LinearMap{ComplexF64}(f, prod(szmps), ishermitian=true)
 end
-
-# function overlap_tensor(cl,cr,orth)
-#     DL, _, DR = size(orth)
-#     DCL = length(cl)
-#     DCR = length(cR)
-#     cltens = reshape(cl,DL,Int(DCL//DL))
-#     crtens = reshape(cr,DL,Int(DCR//DR))
-#     return @tensor out[k][:] := cltens[1,-1]*crtens[2,-3]*conj(orth[1,-2,2])
-# end
 
 function eigensite(site::GenericSite,mposite, hl,hr, orthTensors,prec)
     szmps=size(site)
@@ -99,18 +78,11 @@ function eigensite(site::GenericSite,mposite, hl,hr, orthTensors,prec)
     return GenericSite(reshape(vecmin,szmps)/norm(vecmin), site.purification), real(e)
 end
 
-# function expectation_value(op,site::Array{<:Number,3}, envL, envR)
-#     @tensor e[:] := envL[1,2,3]*op[2,4,5,6]*conj(site[1,4,7])*site[3,5,8]*envR[7,6,8]
-#     return e[1]
-# end
 
 """ sweeps from left to right in the DMRG algorithm """
 function sweep(mps::LCROpenMPS{T}, mpo, Henv, orthenv, prec, dir, orth::Vector{LCROpenMPS{T}}=LCROpenMPS{T}[], alpha=0.0) where {T<:Number}
-    ### minimizes E by diagonalizing site by site in the mps from left to right: j=1-->L-1
-    ### the resulting sites are left-canonicalized
     L::Int = length(mps)
     N_orth = length(orth)
-    #orthTensors = Array{Array{ComplexF64,3},1}(undef,N_orth)
     eold=0.0 #TODO this was chosen arbitrarily
     if dir==:right 
         itr = 1:L-1
@@ -124,13 +96,8 @@ function sweep(mps::LCROpenMPS{T}, mpo, Henv, orthenv, prec, dir, orth::Vector{L
     for j in itr
     
         @assert (center(mps) == j) "The optimization step is not performed at the center of the mps: $(center(mps)) vs $j"
-        # cl = [CL[k][j] for k in 1:N_orth]
-        # cr = [CR[k][j] for k in 1:N_orth]
-        # o::Vector{Array{T,3}} = [data(orth[k][j]) for k in 1:N_orth]
         orthtensors = [local_mul(transpose(orthenv[k].L[j]), transpose(orthenv[k].R[j]),orth[k][j]') for k in 1:N_orth]
         enew = transpose(transfer_matrix(mps[j]', mpo[j], mps[j]) * vec(Henv.R[j])) * vec(Henv.L[j])
-        # enew = real.(expectation_value(data(mpo[j]), data(mps[j]), Henv.L[j] , Henv.R[j]))
-        #@tensor enew[:] := HL[j][1,2,3]*data(mpo[j])[2,4,5,6]*conj(data(mps[j])[1,4,7])*data(mps[j])[3,5,8]*HR[j][7,6,8]
         mps[j], e2 = eigensite(mps[j],mpo[j], Henv.L[j],Henv.R[j], orthtensors, prec)
         
         if alpha > 0.0
@@ -139,37 +106,21 @@ function sweep(mps::LCROpenMPS{T}, mpo, Henv, orthenv, prec, dir, orth::Vector{L
             else
                 alpha *= 1.2
             end
-            # if dir==:right
-            #     env = HL[j]
-            # else
-            #     env = HR[j]
-            # end
             A,B = subspace_expand(alpha,mps[j],mps[j+dirval],Henv[j, reverse_direction(dir)], mpo[j],mps.truncation, dir)
             mps.center+=dirval
             mps.Γ[j] = A
             mps.Γ[j+dirval] = B
-            # if dir==:right
-            #     A,B = subspace_expand_right(alpha,mps[j],mps[j+1],HL[j],mpo[j],mps.truncation)
-            #     mps.center+=1
-            #     mps.Γ[j] = A
-            #     mps.Γ[j+1] = B
-            # end
         elseif dir==:right 
             shift_center_right!(mps)
         elseif dir==:left
             shift_center_left!(mps)
         end
         eold = enew
-        # println(j)
-        # println(size(mps[j]))
-        # println(size(mpo[j]))
         update! = dir==:right ? update_left_environment! : update_right_environment!
         update!(Henv,j,mps[j]',mpo[j],mps[j])
         for k in 1:N_orth
             update!(orthenv[k],j, orth[k][j]', mps[j])
         end
-        # updateCLR(mps,CL,CR,j,dir,orth)
-        # updateHLR(mps,mpo,HL,HR,j,dir)
     end
     return mps, alpha
 end
@@ -194,137 +145,11 @@ eigenstates(hamiltonian, mps::OpenMPS, n::Integer; precision=DEFAULT_DMRG_precis
 DMRG(mpo::AbstractMPO, mps::OpenMPS, precision = DEFAULT_DMRG_precision, alpha=0.0) = DMRG(mpo,LCROpenMPS(mps), precision = precision, alpha=alpha)
 const DEFAULT_DMRG_precision=1e-12
 
-
-# function initializeHLR(mps::LCROpenMPS,mpo)
-#     L = length(mps)
-#     T = eltype(data(mps[1]))
-#     HL = Vector{Array{T,3}}(undef,L)
-#     HR = Vector{Array{T,3}}(undef,L)
-#     HR[L] = Array{T}(undef,1,1,1)
-#     HR[L][1,1,1] = 1
-#     HL[1] = Array{T}(undef,1,1,1)
-#     HL[1][1,1,1] = 1
-#     for j=L-1:-1:1
-#         # @tensoropt (-1,1,-3,3) HR[j][-1,-2,-3] := conj(data(mps[j+1])[-1,4,1])*mpo[j+1].data[-2,4,5,2]*data(mps[j+1])[-3,5,3]*HR[j+1][1,2,3]
-#         #@tensor HR[j][-1,-2,-3] := conj(data(mps[j+1])[-1,4,1])*mpo[j+1].data[-2,4,5,2]*data(mps[j+1])[-3,5,3]*HR[j+1][1,2,3]
-#         HR[j] = calc_HR_env(data(mps[j+1]),data(mpo[j+1]),HR[j+1])
-#     end
-#     for j=2:L
-#         # @tensoropt (1,3,-1,-3) HL[j][-1,-2,-3] := HL[j-1][1,2,3]*conj(data(mps[j-1])[1,4,-1])*mpo[j-1].data[2,4,5,-2]*data(mps[j-1])[3,5,-3]
-#         #@tensor HL[j][-1,-2,-3] := HL[j-1][1,2,3]*conj(data(mps[j-1])[1,4,-1])*mpo[j-1].data[2,4,5,-2]*data(mps[j-1])[3,5,-3]
-#         HL[j] = calc_HL_env(data(mps[j-1]),data(mpo[j-1]),HL[j-1])
-#     end
-#     return HL, HR
-# end
-
-# function calc_HR_env(site, mposite, Hin)
-#     return @tensor Hout[:] := conj(site[-1,4,1])*mposite[-2,4,5,2]*site[-3,5,3]*Hin[1,2,3]
-# end
-# function calc_HL_env(site, mposite, Hin)
-#     return @tensor Hout[:] := conj(site[1,4,-1])*mposite[2,4,5,-2]*site[3,5,-3]*Hin[1,2,3]
-# end
-
-# function initializeCLR(mps::LCROpenMPS{T},orth=LCROpenMPS{T}[]) where {T}
-#     L = length(mps)
-#     Lorth = length(orth)
-#     #T = eltype(data(mps[1]))
-#     CL = Vector{Array{Array{T,2},1}}(undef,Lorth)
-#     CR = Vector{Array{Array{T,2},1}}(undef,Lorth)
-#     for k = 1:length(orth)
-#         CR[k] = Array{Array{T,2}}(undef,L)
-#         CL[k] = Array{Array{T,2}}(undef,L)
-#         CR[k][L] = Array{T}(undef,1,1)
-#         CR[k][L][1,1] = 1
-#         CL[k][1] = Array{T}(undef,1,1)
-#         CL[k][1][1,1] = 1
-#         mps2::LCROpenMPS{T} = orth[k]
-#         for j=1:L-1
-#             # @tensoropt (-2,2,-1,3) CR[k][L-j][-1,-2] := data(mps[L-j+1])[-2,1,2]*conj(data(mps2[L-j+1])[-1,1,3])*CR[k][L-j+1][3,2]
-#             # @tensoropt (2,-2,1,-1) CL[k][1+j][-1,-2] := data(mps[j])[2,3,-2]*conj(data(mps2[j])[1,3,-1])*CL[k][j][1,2]
-            
-#             #@tensor CR[k][L-j][-1,-2] := data(mps[L-j+1])[-2,3,2]*conj(data(mps2[L-j+1])[-1,3,1])*CR[k][L-j+1][1,2]
-#             CR[k][L-j] = calc_CR_env(data(mps[L-j+1]),data(mps2[L-j+1]),CR[k][L-j+1])
-#             #@tensor CL[k][1+j][-1,-2] := data(mps[j])[2,3,-2]*conj(data(mps2[j])[1,3,-1])*CL[k][j][1,2]
-#             CL[k][j+1] = calc_CL_env(data(mps[j]),data(mps2[j]),CL[k][j])
-#         end
-#     end
-#     return CL, CR
-# end
-# function calc_CR_env(site,site2, Cin)
-#     return @tensor Cout[:] := site[-2,3,2]*conj(site2[-1,3,1])*Cin[1,2]
-# end
-# function calc_CL_env(site,site2, Cin)
-#     return @tensor Cout[:] := site[2,3,-2]*conj(site2[1,3,-1])*Cin[1,2]
-# end
-
-# """ Update HL, HR, when tensor i has been updated in a dir-sweep"""
-# function updateHLR(mps,mpo,HL,HR,i,dir)
-#     L = length(mps)
-#     if dir==:right
-#         # @tensoropt (1,3,-1,-3) HL[i+1][-1,-2,-3] := HL[i][1,2,3]*conj(data(mps[i])[1,4,-1])*mpo[i].data[2,4,5,-2]*data(mps[i])[3,5,-3]
-#         #@tensor HL[i+1][-1,-2,-3] := (HL[i][1,5,3]*conj(data(mps[i])[1,4,-1]))*(mpo[i].data[5,4,2,-2]*data(mps[i])[3,2,-3])
-#         HL[i+1] = calc_HL_env(data(mps[i]),data(mpo[i]),HL[i])
-#     elseif dir==:left
-#         # @tensoropt (-1,1,-3,3) HR[i-1][-1,-2,-3] := conj(data(mps[i])[-1,4,1])*mpo[i].data[-2,4,5,2]*data(mps[i])[-3,5,3]*HR[i][1,2,3]
-#         #@tensor HR[i-1][-1,-2,-3] := (conj(data(mps[i])[-1,2,3])*mpo[i].data[-2,2,5,4])*(data(mps[i])[-3,5,1]*HR[i][3,4,1])
-#         HR[i-1] = calc_HR_env(data(mps[i]),data(mpo[i]),HR[i])
-#     end
-
-# end
-
-# function updateCLR(mps::LCROpenMPS,CL,CR,i, dir, orth=[])
-#     for k = 1:length(orth)
-#         Γo = orth[k]
-#         if dir==:right
-#             # @tensoropt (2,-2,1,-1) CL[k][i+1][-1,-2] := data(mps[i])[2,3,-2]*conj(data(Γo[i])[1,3,-1])*CL[k][i][1,2]
-#             #@tensor CL[k][i+1][-1,-2] := data(mps[i])[2,3,-2]*conj(data(Γo[i])[1,3,-1])*CL[k][i][1,2]
-#             CL[k][i+1] = calc_CL_env(data(mps[i]),data(Γo[i]),CL[k][i])
-#         elseif dir==:left
-#             # @tensoropt (-1,-2,3,2) CR[k][i-1][-1,-2] := data(mps[i])[-2,1,2]*conj(data(Γo[i])[-1,1,3])*CR[k][i][3,2]
-#             #@tensor CR[k][i-1][-1,-2] := data(mps[i])[-2,3,2]*conj(data(Γo[i])[-1,3,1])*CR[k][i][1,2]
-#             CR[k][i-1] = calc_CR_env(data(mps[i]),data(Γo[i]),CR[k][i])
-#         end
-#     end
-# end
-
-# function getHeff(mps,mpo,HL,HR,i)
-#     L=length(mps)
-#     @tensor Heff[:] := HL[i][-1,1,-4]*mpo[i].data[1,-2,-5,2]*HR[i][-3,2,-6]
-#     return Heff
-# end
-
-# function HeffMult(tensor,mposite,HL,HR)
-#     #@tensoropt (-1,4,6,-3) temp[:] := HL[-1,1,4]* mposite[1,-2,5,2] *tensor[4,5,6]*HR[-3,2,6]
-#     @tensor temp[:] := (HL[-1,2,3]* mposite[2,-2,4,5]) *(tensor[3,4,1]*HR[-3,5,1])
-#     return temp
-# end
-
 function expansion_term(alpha, site, env, mposite)
-    # lm = size(mposite,1)
-    # DL = size(tensor,1)
-    # L = reshape(envL,Int(length(hl)//(DL*lm)),lm,DL)
     @tensor P[:] := site[1,2,-3]*env[-1,4,1]*mposite[4,-2,2,-4]
     return alpha*reshape(P,size(env,1),size(site,2),size(mposite,4)*size(site,3))
 end
 
-# function subspace_expand_right(alpha,site,nextsite,hl,mposite, trunc)
-#     ss= size(site)
-#     ss2 = size(nextsite)
-#     d = ss[2]
-#     P = expansion_term(alpha, data(site), hl, data(mposite))
-#     sp = size(P)
-#     P0 = zeros(ComplexF64, sp[3], d, ss2[3])
-#     M = Array{ComplexF64,3}(undef,(ss[1],ss[2],ss[3]+sp[3]))
-#     B = Array{ComplexF64,3}(undef,(ss2[1]+sp[3],ss2[2],ss2[3]))
-#     for k in 1:d
-#         M[:,k,:] = hcat(data(site)[:,k,:],P[:,k,:])
-#         B[:,k,:] = vcat(data(nextsite)[:,k,:],P0[:,k,:])
-#     end
-#     U,S,V,err = split_truncate!(reshape(M,ss[1]*ss[2],ss[3]+sp[3]), trunc)
-#     newsite = GenericSite(reshape(Matrix(U),ss[1],ss[2],length(S)), false)
-#     newnextsite = VirtualSite(Diagonal(S)*V)*GenericSite(B,false)
-#     return newsite, newnextsite
-# end
 
 function subspace_expand(alpha,site,nextsite,env,mposite, trunc, dir)
     if dir==:left

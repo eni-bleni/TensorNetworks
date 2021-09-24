@@ -309,6 +309,9 @@ function boundary(mps::UMPS)
 end
 transfer_matrix_bond(mps::UMPS, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
 transfer_matrix_bond(mps1::UMPS, mps2::UMPS, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
+transfer_matrix_bond(mps::ConjugateSite{<:UMPS}, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
+transfer_matrix_bond(mps1::ConjugateSite{<:UMPS}, mps2::UMPS, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
+
 # """ 
 # 	boundary(mps::UMPS, mpo::MPO) 
 
@@ -493,46 +496,6 @@ function expectation_value(mps::UMPS, op::Array{T_op,N_op}, site::Integer) where
 	return val
 end
 
-# expectation_value(mps::UMPS, op::MPOsite, site::Integer) = expectation_value(mps[site],op)
-
-# function expectation_values_two_site(mps::UMPS, op)
-# 	valRs, vecRs = transfer_spectrum(mps,:left,nev=4)
-# 	valLs, vecLs = transfer_spectrum(mps,:right,nev=4)
-# 	DR = length(mps.Λ[1])
-# 	DL = length(mps.Λ[1])
-# 	rhoRs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecRs[:,k],DR,DR),1:4)))
-# 	rhoLs = Matrix.(canonicalize_eigenoperator.(map(k-> reshape(vecLs[:,k],DL,DL),1:4)))
-# 	thetaL = similar(mps.Γ[1])
-# 	thetaR = similar(mps.Γ[2])
-#     absorb_l!(thetaL,mps.Λ[1],mps.Γ[1],mps.Λ[2])
-# 	absorb_l!(thetaR,mps.Γ[2],mps.Λ[1])
-#     #rs = Array{Any,2}(undef,4,4)
-# 	f(k1,k2) = @tensoropt (d,u,r,l,Ru,Rd,Lu,Ld) rhoLs[k1][Lu,Ld]*thetaL[Ld,cld,d] *op[clu,cru,cld,crd] *conj(thetaL[Lu,clu,u]) *conj(thetaR[u,cru,Ru]) *thetaR[d,crd,Rd] *rhoRs[k2][Ru,Rd]
-# 	rs = [ f(k1,k2) for k1 in 1:4, k2 in 1:4 ]
-#     return rs
-# end
-
-# expectation_values(mps::UMPS, g::ScaledIdentityGate) = fill(data(g)*norm(mps), length(mps))
-
-# function expectation_values(mps::UMPS,op)
-#     opDims = size(op)
-#     opLength = Int(length(opDims)/2)
-#     N = length(mps.Γ)
-# 	if ispurification(mps)
-# 		op = auxillerate(op)
-# 	end
-# 	vals = Array{ComplexF64,1}(undef,N)
-# 	for site in 1:N
-# 		if opLength == 1
-# 			vals[site] = expectation_value_one_site(mps.Λ[site], mps.Γ[site], mps.Λ[mod1(site+1,N)], op)
-# 		elseif opLength == 2
-# 			vals[site] = expectation_value_two_site(mps.Γ[mod1.(site:site+1,N)], mps.Λ[mod1.(site:site+2,N)], op)
-# 		else
-# 			error("Expectation value not implemented for operators of this size")
-# 		end
-# 	end
-#     return vals
-# end
 
 function correlator(mps::UMPS{T},op1,op2,n) where {T}
 	opsize = size(op1)
@@ -576,30 +539,30 @@ end
 
 
 # %% Entropy
-function renyi(mps::UMPS, n)
-	N = length(mps.Γ)
-	T = eltype(mps.Γ[1])
-    transfer_matrices = transfer_matrices_squared(mps,:right)
-	sizes = size.(mps.Γ)
-	id = Matrix{T}(I,sizes[1][1],sizes[1][1])
-	leftVec = vec(@tensor id[-1,-2]*id[-3,-4])
-	Λsquares = Diagonal.(mps.Λ .^2)
-	rightVecs = map(k->vec(@tensor Λsquares[-1,-2]*Λsquares[-3,-4])', 1:N)
-    vals = Float64[]
-    for k in 1:n
-		leftVec = transfer_matrices[mod1(k,N)]*leftVec
-		val = rightVecs[mod1(k+1,N)] * leftVec
-        push!(vals, -log2(val))
-    end
-    return vals
-end
+# function renyi(mps::UMPS, n)
+# 	N = length(mps.Γ)
+# 	T = eltype(mps.Γ[1])
+#     transfer_matrices = transfer_matrices_squared(mps,:right)
+# 	sizes = size.(mps.Γ)
+# 	id = Matrix{T}(I,sizes[1][1],sizes[1][1])
+# 	leftVec = vec(@tensor id[-1,-2]*id[-3,-4])
+# 	Λsquares = Diagonal.(mps.Λ .^2)
+# 	rightVecs = map(k->vec(@tensor Λsquares[-1,-2]*Λsquares[-3,-4])', 1:N)
+#     vals = Float64[]
+#     for k in 1:n
+# 		leftVec = transfer_matrices[mod1(k,N)]*leftVec
+# 		val = rightVecs[mod1(k+1,N)] * leftVec
+#         push!(vals, -log2(val))
+#     end
+#     return vals
+# end
 
-function renyi(mps::UMPS)
-	N = length(mps.Γ)
-	T = eltype(mps.Γ[1])
-    transfer_matrix = transfer_matrix_squared(mps,:right)
-	return -log2(eigsolve(transfer_matrix,1)[1])
-end
+# function renyi(mps::UMPS) #FIXME implement transfer_matrix_squared
+# 	N = length(mps.Γ)
+# 	T = eltype(mps.Γ[1])
+#     transfer_matrix = transfer_matrix_squared(mps,:right)
+# 	return -log2(eigsolve(transfer_matrix,1)[1])
+# end
 
 # %%
 function saveUMPS(mps, filename)

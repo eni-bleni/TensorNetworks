@@ -7,10 +7,6 @@ LinearAlgebra.ishermitian(gate::ScaledIdentityGate) = gate.ishermitian
 isunitary(gate::GenericSquareGate) = gate.isunitary
 isunitary(mat::AbstractArray{<:Number,2}) = mat'*mat ≈ one(mat) && mat*mat' ≈ one(mat)
 Base.complex(::Type{<:GenericSquareGate{T,N}}) where {T,N} = GenericSquareGate{complex(T),N}
-# Base.complex(::Type{<:HermitianGate{T,N}}) where {T,N} = HermitianGate{complex(T),N}
-
-#gateData(gate::AbstractGate) = AbstractGate.data
-#GenericSquareGate{T,N}(data::AbstractArray{K,N}) where {K,T,N} = GenericSquareGate{T,N}(convert.(T,data))
 
 Base.:*(x::K, g::ScaledIdentityGate) where {K<:Number} = ScaledIdentityGate(x*data(g), length(g))
 Base.:*(g::ScaledIdentityGate, x::K) where {K<:Number} = ScaledIdentityGate(x*data(g),length(g))
@@ -36,32 +32,14 @@ Base.adjoint(g::GenericSquareGate{T,N}) where {T,N} = GenericSquareGate(gate(Mat
 
 Base.adjoint(g::ScaledIdentityGate) = ScaledIdentityGate(data(g)',length(g))
 Base.transpose(g::ScaledIdentityGate) = g
-# Base.:*(x::K, g::HermitianGate) where {K<:Real} = HermitianGate(x*g.data)
-# Base.:*(g::HermitianGate, x::K) where {K<:Real} = HermitianGate(x*g.data)
-# Base.:*(x::K, g::HermitianGate) where {K<:Number} = ScaledHermitianGate(g,x)
-# Base.:*(g::HermitianGate, x::K) where {K<:Number} = ScaledHermitianGate(g,x)
-# Base.:*(x::K, g::ScaledHermitianGate) where {K<:Number} = ScaledHermitianGate(g.data, g.prefactor*x)
-# Base.:*(g::ScaledHermitianGate, x::K) where {K<:Number} = ScaledHermitianGate(g.data, g.prefactor*x)
 
 data(gate::GenericSquareGate) = gate.data
 data(gate::ScaledIdentityGate) = gate.data
 
-# Base.exp(g::HermitianGate) = HermitianGate(exp(g.data))
-# function Base.exp(g::ScaledHermitianGate{T,N}) where {T,N} 
-#     if real(g.prefactor) ≈ 0
-#         return UnitaryGate(gate(exp(g.prefactor*Hermitian(Matrix(g.data))), Int(N/2)))
-#     else
-#         return exp(g.prefactor*g.data.data)
-#     end
-# end
-    
 Base.convert(::Type{GenericSquareGate{T,N}}, g::GenericSquareGate{K,N}) where {T,K,N} = GenericSquareGate(convert.(T,g.data))
 Base.permutedims(g::GenericSquareGate, perm) = GenericSquareGate(permutedims(g.data,perm))
-# Base.convert(::Type{HermitianGate{T,N}},g::HermitianGate{T,N}) where {T,N} = g
-# Base.convert(::Type{HermitianGate{T,N}},g::HermitianGate{K,N}) where {T,K,N} = HermitianGate(convert(GenericSquareGate{T,N},g.data))
-# Base.permutedims(g::HermitianGate, perm) = HermitianGate(permutedims(g.data,perm))
+
 LinearAlgebra.Hermitian(squareGate::AbstractSquareGate) = (squareGate + squareGate')/2
-# HermitianGate(squareGate::GenericSquareGate) = HermitianGate(squareGate.data)
 
 function Gate(data::Array{T,N}) where {T<:Number,N}
 	if iseven(N)
@@ -77,7 +55,7 @@ function Base.Matrix(g::GenericSquareGate)
     D = *(sg[1:l]...)
     reshape(data(g),D,D)
 end
-# Base.Matrix(g::HermitianGate) = Matrix(g.data)
+
 function gate(matrix::AbstractMatrix ,sites::Integer)
     sm = size(matrix)
     d = Int(sm[1]^(1/sites))
@@ -100,12 +78,3 @@ function auxillerate(op::GenericSquareGate{T,N}) where {T,N}
 	return GenericSquareGate(reshape(tens,(opSize .^2)...))
 end
 auxillerate(gate::ScaledIdentityGate) = gate
-# function gate(matrix::AbstractMatrix; dim::Integer)
-#     sm = size(matrix)
-#     sites = Int(log(dim,sm[1]))
-#     reshape(matrix, repeat([dim], sites))
-# end
-
-
-# expectation_value(sites::Vector{<:GenericSite}, gate::HermitianGate) = real.(expectation_value(sites, gate.data))
-# expectation_value(sites::Vector{<:AbstractOrthogonalSite}, gate::AbstractSquareGate) = expectation_value(GenericSite.(sites), gate)
