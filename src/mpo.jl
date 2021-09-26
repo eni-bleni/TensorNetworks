@@ -77,7 +77,7 @@ end
 
 struct ScaledIdentityMPO{T} <: AbstractMPO{T}
     data::T
-    length::UInt32
+    length::Int
     function ScaledIdentityMPO(scaling::T,n::Integer) where {T<:Number}
         new{T}(scaling,n)
     end
@@ -195,4 +195,18 @@ function multiplyMPOs(mpo1,mpo2; c=true) #FIXME
         mpo[j] = MPOsite(reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6]))
     end
     return MPO(mpo)
+end
+
+
+function Matrix(mpo::MPO)
+    n = length(mpo)
+    T = eltype(mpo[1])
+    tens = SparseArray(ones(T,1,1,1))
+    for site in mpo[1:n]
+        dat = SparseArray(data(site))
+        @tensor tens[out, newout, in,newin, right] := tens[out,in,c] * dat[c,newout,newin, right]
+        st =size(tens)
+        tens = SparseArray(reshape(tens, st[1]*st[2],st[3]*st[4],st[5]))
+    end
+    return tens[:,:,1]
 end

@@ -142,7 +142,7 @@ function set_center(mps::LCROpenMPS, n::Integer)
     set_center!(mps2,n)
     return mps2
 end
-
+iscenter(mps::LCROpenMPS, c::Integer) = c==center(mps)
 
 # function qr_right(L::GenericSite{T}, R::GenericSite{T})
 #     Q, r = to_left_orthogonal(L)
@@ -311,22 +311,29 @@ end
 # end
 
 # %% TEBD
-"""
-    apply_layers(mps::LCROpenMPS,layers)
+# """
+#     apply_layers(mps::LCROpenMPS,layers)
 
-Modify the mps by acting with the layers of gates
-"""
-function apply_layers(mps::LCROpenMPS, layers)
-    omps = OpenMPS(mps)
-    total_error = apply_layers!(omps, layers)
-    return omps
-end
+# Modify the mps by acting with the layers of gates
+# """
+# function apply_layers(mps::LCROpenMPS, layers)
+#     omps = OpenMPS(mps)
+#     total_error = apply_layers!(omps, layers)
+#     return omps
+# end
 
 
-function apply_identity_layer(mps::LCROpenMPS)
-    omps = OpenMPS(mps)
-    total_error = apply_identity_layer!(omps)
-    return omps
+function apply_identity_layer(mpsin::LCROpenMPS; kwargs...)
+    truncation = get(kwargs, :truncation, mpsin.truncation)
+    mps = set_center(mpsin,1)
+    for k in 1:length(mps)-1
+        A, S, B,  err = apply_two_site_gate(mps[k], mps[k+1], IdentityGate(2), truncation)
+        mps.center += 1
+        mps[k] = A
+        mps[k+1] = S*B
+        mps.error += err
+    end
+    return mps
 end
 
 """

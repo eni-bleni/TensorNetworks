@@ -40,6 +40,9 @@ MPOsite(site::ConjugateSite{<:OrthogonalLinkSite},dir) = MPOsite(GenericSite(sit
 Base.adjoint(site::AbstractSite) = ConjugateSite(site)
 Base.adjoint(site::ConjugateSite) = site.site
 
+Base.sqrt(site::LinkSite) = LinkSite(sqrt.(data(site)))
+
+
 ispurification(site::ConjugateSite) = ispurification(site.site)
 
 isleftcanonical(site::AbstractSite)  = isleftcanonical(data(site))

@@ -53,6 +53,8 @@ function apply_layer(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncat
 	return newsites, total_error[]
 end
 
+apply_identity_layer(sites::Vector{<:OrthogonalLinkSite}, parity, truncation; kwargs...) = apply_layer(sites, [IdentityGate(2) for k in 1:length(sites)], parity,truncation;kwargs...)	
+
 function apply_layer!(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
 	N = length(sites)
 	if isodd(N)

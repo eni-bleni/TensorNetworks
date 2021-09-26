@@ -212,7 +212,7 @@ function transfer_left(Γ::NTuple{N,Array{<:Number,3}}, gate::AbstractSquareGate
 end 
 
 
-function transfer_right_gate(Γ1::NTuple{N, Array{T,3}}, gate::GenericSquareGate, Γ2::NTuple{N, Array{<:Number,3}}) where {N,T}
+function transfer_right_gate(Γ1::NTuple{N, Array{<:Number,3}}, gate::GenericSquareGate, Γ2::NTuple{N, Array{<:Number,3}}) where {N}
 	op = data(gate)
     oplength = length(gate)
 	@assert length(Γ1) == oplength == length(Γ2) "Error in transfer_right_gate: number of sites does not match gate length"
@@ -234,9 +234,9 @@ function transfer_right_gate(Γ1::NTuple{N, Array{T,3}}, gate::GenericSquareGate
 		return vec(v)
 	end
 	#TODO Define adjoint
-	return LinearMap{T}(T_on_vec,s_final1*s_final2,s_start1*s_start2)
+	return LinearMap{eltype(Γ1[1])}(T_on_vec,s_final1*s_final2,s_start1*s_start2)
 end
-function transfer_right_gate(Γ::NTuple{N, Array{T,3}}, gate::GenericSquareGate) where {T, N}
+function transfer_right_gate(Γ::NTuple{N, Array{<:Number,3}}, gate::GenericSquareGate) where {N}
 	op = data(gate)
     oplength = length(gate)
 	@assert length(Γ) == oplength "Error in transfer_right_gate: number of sites does not match gate length"
@@ -256,7 +256,7 @@ function transfer_right_gate(Γ::NTuple{N, Array{T,3}}, gate::GenericSquareGate)
 		return vec(v)
 	end
 	#TODO Define adjoint
-	return LinearMap{T}(T_on_vec,s_final^2,s_start^2)
+	return LinearMap{eltype(Γ[1])}(T_on_vec,s_final^2,s_start^2)
 end
 
 #Sites 
@@ -295,8 +295,8 @@ function transfer_matrix(sites::NTuple{N,Union{<:AbstractMPOsite, <:AbstractSite
 	return scaling*T
 end
 
-transfer_matrix(site1::GenericSite, op::AbstractSquareGate, site2::GenericSite, direction::Symbol=:left) = transfer_matrix(tuple(site1'),op,tuple(site2),direction)
-transfer_matrix(site1::ConjugateSite{<:GenericSite}, op::AbstractSquareGate, site2::GenericSite, direction::Symbol=:left) = transfer_matrix(tuple(site1),op,tuple(site2),direction)
+# transfer_matrix(site1::AbstractSite, op::AbstractSquareGate, site2::AbstractSite, direction::Symbol=:left) = transfer_matrix(tuple(site1'),op,tuple(site2),direction)
+transfer_matrix(site1::ConjugateSite{<:AbstractSite}, op::GenericSquareGate, site2::AbstractSite, direction::Symbol=:left) = transfer_matrix(tuple(site1),op,tuple(site2),direction)
 function transfer_matrix(site1::NTuple{N, ConjugateSite{<:AbstractSite}}, op::AbstractSquareGate, site2::NTuple{N, <:AbstractSite}, direction::Symbol=:left) where {N}
 	@assert length(site1) == length(site2) == length(op)
 	if ispurification(site1[1])
@@ -352,7 +352,7 @@ function transfer_matrices(sites1::Vector{<:AbstractSite}, op::Vector{<:Abstract
 	end
 	Ts
 end
-function transfer_matrices(sites1::Vector{<:AbstractSite}, op::AbstractMPO, sites2::Vector{<:AbstractSite}, direction::Symbol=:left)
+function transfer_matrices(sites1::Vector{<:AbstractSite}, op::Union{AbstractMPO,Vector{<:MPOsite}}, sites2::Vector{<:AbstractSite}, direction::Symbol=:left)
 	@assert length(sites1) == length(sites2) == length(op)
 	N = length(sites1)
 	Ts = []
@@ -393,8 +393,8 @@ See also: [`transfer_matrix`](@ref), [`transfer_matrices_squared`](@ref)
 """
 # transfer_matrices(mps::AbstractMPS, direction=:left) = [transfer_matrix(site,direction) for site in mps[1:end]]
 
-transfer_matrices(mps1::AbstractMPS, op, mps2::AbstractMPS, direction=:left) = transfer_matrices(mps1[1:end], op, mps2[1:end], direction)
-transfer_matrices(mps1::AbstractMPS, mps2::AbstractMPS, direction=:left) = transfer_matrices(mps1, IdentityMPOsite, mps2, direction)
+transfer_matrices(mps1::AbstractMPS, op, mps2::AbstractMPS, direction::Symbol=:left) = transfer_matrices(mps1[1:end], op, mps2[1:end], direction)
+transfer_matrices(mps1::AbstractMPS, mps2::AbstractMPS, direction::Symbol=:left) = transfer_matrices(mps1, IdentityMPOsite, mps2, direction)
 transfer_matrices(mps::AbstractMPS, op, direction=:left) = transfer_matrices(mps', op, mps, direction)
 transfer_matrices(mps::AbstractMPS, direction::Symbol=:left) = transfer_matrices(mps',IdentityMPOsite, mps, direction)
 
@@ -447,11 +447,11 @@ See also: [`transfer_matrices`](@ref)
 # 	end
 # 	return N==1 ? Ts[1] : *(Ts...)
 # end
-transfer_matrix(mps::AbstractMPS, mpo::AbstractMPO, direction=:left) = transfer_matrix(mps',mpo,mps,direction)
-transfer_matrix(mps::AbstractMPS, direction=:left) = transfer_matrix(mps',mps,direction)
-transfer_matrix(mps1::AbstractMPS, mps2::AbstractMPS, direction=:left) = transfer_matrix(mps1,IdentityMPO(length(mps1)), mps2,direction)
+transfer_matrix(mps::AbstractMPS, mpo::AbstractMPO, direction::Symbol=:left) = transfer_matrix(mps',mpo,mps,direction)
+transfer_matrix(mps::AbstractMPS, direction::Symbol=:left) = transfer_matrix(mps',mps,direction)
+transfer_matrix(mps1::AbstractMPS, mps2::AbstractMPS, direction::Symbol=:left) = transfer_matrix(mps1,IdentityMPO(length(mps1)), mps2,direction)
 # transfer_matrix(mps::AbstractMPS, mpo::AbstractMPO, site::Integer, direction=:left) = transfer_matrix(mps,mpo,mps,site,direction)
-function transfer_matrix(mps1::AbstractMPS, op, mps2::AbstractMPS, direction=:left)
+function transfer_matrix(mps1::AbstractMPS, op, mps2::AbstractMPS, direction::Symbol=:left)
 	return transfer_matrix(mps1[1:end],op,mps2[1:end], direction)
 	# N = length(Ts)
 	# if direction == :right

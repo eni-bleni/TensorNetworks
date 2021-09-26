@@ -258,6 +258,12 @@ uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 [[Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 
+[[SparseArrayKit]]
+deps = ["LinearAlgebra", "Requires", "TupleTools"]
+git-tree-sha1 = "16a38b78b26980703c9bb1918dc58627e7f2aeed"
+uuid = "a9a3c162-d163-4c15-8926-b8794fbefed2"
+version = "0.2.0"
+
 [[SparseArrays]]
 deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"

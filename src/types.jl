@@ -1,5 +1,5 @@
 struct TruncationArgs
-    Dmax::UInt16
+    Dmax::Int
     tol::Float64
 	normalize::Bool
 end
@@ -133,7 +133,7 @@ mutable struct LROpenMPS{T<:Number} <: AbstractOpenMPS
     error::Float64
 
     #Orthogonality boundaries
-    center::UInt16
+    center::Int
 
     function LROpenMPS(
         Γ::Vector{AbstractOrthogonalSite},

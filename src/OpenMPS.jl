@@ -257,6 +257,9 @@ end
 #     return C[1, 1]
 # end
 
+set_center!(mps::OpenMPS,::Integer) = mps
+iscenter(mps::OpenMPS, ::Integer) = true
+
 """
     scalar_product(mps::OpenMPS, mps2::OpenMPS)
 

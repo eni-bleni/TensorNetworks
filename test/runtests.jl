@@ -1,4 +1,4 @@
-using Test, TensorNetworks, TensorOperations, LinearAlgebra
+using Test, TensorNetworks, TensorOperations, LinearAlgebra, KrylovKit
 
 @testset "Gate" begin
     op = rand(Float64,2,2)
@@ -377,12 +377,22 @@ end
     states, energies = eigenstates(ham, mps, 5; precision = 1e-8);
     @test sort(energies) ≈ -[Nchain-1, Nchain-1, Nchain-3, Nchain-3, Nchain-3]
 
+    Nchain = 10
+    Dmax = 20
+    h,g = rand(2)
+    ham = IsingMPO(Nchain, 1, h,g);
+    hammat = Matrix(ham);
+    mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax));
+    energiesED, _ = eigsolve(hammat,4,:SR);
+    states, energies = eigenstates(ham, mps, 4; precision = 1e-8, shifter=SubspaceExpand(1.0));
+    @test sort(energies) ≈ energiesED[1:4]
+
     #Ground state energy of Ising CFT
     Nchain = 20
     Dmax = 20
     ham = IsingMPO(Nchain, 1, 1, 0);
     mps = canonicalize(randomLCROpenMPS(Nchain, 2, Dmax));
-    states, energies = eigenstates(ham, mps, 5; precision = 1e-8,alpha=1.0);
+    states, energies = eigenstates(ham, mps, 5; precision = 1e-8,shifter = SubspaceExpand(1.0));
     @test abs(energies[1]/(Nchain) + 4/π) < 1/Nchain
 end
 
@@ -406,4 +416,17 @@ end
     e0, heff,info = TensorNetworks.effective_hamiltonian(mps,hammpo,direction=:left);
     #Empo = expectation_value(mps,hammpo)
     @test E ≈ e0
+end
+
+@testset "iterative_compression" begin
+    theta = 2*pi*rand()
+    phi = 2*pi*rand()
+    N = 10
+    trunc = TruncationArgs(10,1e-12,true)
+    target = LCROpenMPS([qubit(2*pi*rand(),2*pi*rand()) for k in 1:N],truncation=trunc);
+    guess = canonicalize(randomLCROpenMPS(N,2,10));
+    
+    mps = TensorNetworks.iterative_compression(target, guess);
+    @test scalar_product(mps,target) ≈ 1
+    @test scalar_product(mps,guess) ≈ scalar_product(target,guess)
 end

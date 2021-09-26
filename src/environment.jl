@@ -6,15 +6,25 @@ struct DenseFiniteEnvironment{T,N} <: AbstractFiniteEnvironment
     L::Vector{Array{T,N}}
     R::Vector{Array{T,N}}
 end
-struct DenseInFiniteEnvironment{T,N} <: AbstractInfiniteEnvironment 
+struct DenseInfiniteEnvironment{T,N} <: AbstractInfiniteEnvironment 
     L::Vector{Array{T,N}}
     R::Vector{Array{T,N}}
 end
+
+# struct ScaledIdentityEnvironment{T} <: AbstractEnvironment
+#     scaling::T
+#     function ScaledIdentityEnvironment(scaling::T) where {T<:Number}
+#         new{T}(scaling)
+#     end
+# end
+# const IdentityEnvironment = IdentityEnvironment(true)
+
+
 Base.length(env::AbstractEnvironment) = length(env.L)
 finite_environment(L::Vector{Array{T,N}}, R::Vector{Array{T,N}}) where {T,N} = DenseFiniteEnvironment(L, R)
-infinite_environment(L::Vector{Array{T,N}}, R::Vector{Array{T,N}}) where {T,N} = DenseInFiniteEnvironment(L, R)
+infinite_environment(L::Vector{Array{T,N}}, R::Vector{Array{T,N}}) where {T,N} = DenseInfiniteEnvironment(L, R)
 
-function halfenvironment(mps1::AbstractMPS, mpo::AbstractMPO, mps2::AbstractMPS, dir::Symbol)
+function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mps2::AbstractMPS, dir::Symbol)
     Ts = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
     V = boundary(mps1, mpo, mps2, dir)
     N = length(mps1)
@@ -39,7 +49,7 @@ function halfenvironment(mps1::AbstractMPS, mpo::AbstractMPO, mps2::AbstractMPS,
     end
     return env
 end
-function halfenvironment(mps1::AbstractMPS, mpo::ScaledIdentityMPO, mps2::AbstractMPS, dir::Symbol)
+function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::ScaledIdentityMPO, mps2::AbstractMPS, dir::Symbol)
     Ts = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
     V = boundary(mps1,mpo,mps2,dir)
     N = length(mps1)
@@ -63,12 +73,12 @@ function halfenvironment(mps1::AbstractMPS, mpo::ScaledIdentityMPO, mps2::Abstra
     return env
 end
 
-halfenvironment(mps1::AbstractMPS, mps2::AbstractMPS, dir::Symbol) = halfenvironment(mps1, IdentityMPO(length(mps1)), mps2, dir)
+halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mps2::AbstractMPS, dir::Symbol) = halfenvironment(mps1, IdentityMPO(length(mps1)), mps2, dir)
 halfenvironment(mps::AbstractMPS, mpo::AbstractMPO, dir::Symbol) = halfenvironment(mps', mpo, mps, dir)
 halfenvironment(mps::AbstractMPS, dir::Symbol) = halfenvironment(mps', IdentityMPO(length(mps)), mps, dir)
 
 
-function environment(mps1::AbstractMPS, mpo::AbstractMPO, mps2::AbstractMPS)
+function environment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mps2::AbstractMPS)
     L = halfenvironment(mps1,mpo,mps2,:left)
     R = halfenvironment(mps1,mpo,mps2,:right)
     if isinfinite(mps1)
@@ -78,7 +88,7 @@ function environment(mps1::AbstractMPS, mpo::AbstractMPO, mps2::AbstractMPS)
     end
 end
 
-environment(mps1::AbstractMPS, mps2::AbstractMPS) = environment(mps1, IdentityMPO(length(mps1)), mps2)
+environment(mps1::ConjugateMPS{<:AbstractMPS}, mps2::AbstractMPS) = environment(mps1, IdentityMPO(length(mps1)), mps2)
 environment(mps::AbstractMPS, mpo::AbstractMPO) = environment(mps', mpo, mps)
 environment(mps::AbstractMPS) = environment(mps', IdentityMPO(length(mps)), mps)
 
@@ -117,25 +127,13 @@ update_environment!(env::AbstractFiniteEnvironment, mps::AbstractSite, site::Int
 # end
 
 
-function local_mul(envL,envR,mposite::AbstractMPOsite,tensor::GenericSite) #TODO Check type stability
-    #@tensoropt (-1,4,6,-3) temp[:] := HL[-1,1,4]* mposite[1,-2,5,2] *tensor[4,5,6]*HR[-3,2,6]
-    # lm,_,_,rm = size(mposite)
-    # DL,_,DR = size(tensor)
-    # L = reshape(envL,Int(length(envL)//(DL*lm)),lm,DL)
-    # R = reshape(envR,Int(length(envR)//(DR*rm)),rm,DR)
-    return @tensor temp[:] := (envL[-1,2,3]* data(mposite)[2,-2,4,5]) *(data(tensor)[3,4,1]*envR[-3,5,1])
-end
-
-function local_mul(envL,envR,mposite::AbstractMPOsite,tensor)
-    return @tensor temp[:] := (envL[-1,2,3]* data(mposite)[2,-2,4,5]) *(tensor[3,4,1]*envR[-3,5,1])
-end
-
-function local_mul(envL,envR,tensor)
-    # DL,_,DR = size(tensor)
-    # L = reshape(envL,Int(length(envL)//DL),DL)
-    # R = reshape(envR,Int(length(envR)//DR),DR)
-    return @tensor temp[:] := (envL[-1,1]*data(tensor)[1,-2,2]*envR[-3,2])
-end
+local_mul(envL,envR,mposite::AbstractMPOsite,site::Array{<:Number,3}) =  @tensor temp[:] := (envL[-1,2,3]* data(mposite)[2,-2,4,5]) *(site[3,4,1]*envR[-3,5,1])    
+local_mul(envL,envR,mposite::AbstractMPOsite,site::GenericSite) = GenericSite(local_mul(envL,envR,mposite,data(site)), ispurification(site))
+local_mul(envL,envR,mposite::AbstractMPOsite,site::OrthogonalLinkSite) = local_mul(envL,envR, mposite, site.Λ1*site*site.Λ2)
+   
+local_mul(envL,envR,site::Array{<:Number,3}) =  @tensor temp[:] := envL[-1,1]*site[1,-2,2]*envR[-3,2]
+local_mul(envL,envR,site::GenericSite) = GenericSite(local_mul(envL,envR,data(site)), ispurification(site))
+local_mul(envL,envR,site::OrthogonalLinkSite) = local_mul(envL,envR, site.Λ1*site*site.Λ2)
 
 function Base.getindex(env::AbstractEnvironment,i::Integer, dir::Symbol)
     if dir==:left
@@ -147,3 +145,4 @@ function Base.getindex(env::AbstractEnvironment,i::Integer, dir::Symbol)
         return nothing
     end
 end
+# Base.getindex(env::ScaledIdentityEnvironment,i::Integer, dir::Symbol) = env
