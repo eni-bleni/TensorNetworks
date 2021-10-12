@@ -4,8 +4,12 @@ authors = ["Viktor Svensson <svensson.viktor.91@gmail.com>"]
 version = "2.0.1"
 
 [deps]
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
+DoubleFloats = "497a8b3b-efae-58df-a0af-a86822472b78"
+GenericSchur = "c145ed77-6b09-5dd9-b285-bf645a82121e"
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 SparseArrayKit = "a9a3c162-d163-4c15-8926-b8794fbefed2"
 TensorOperations = "6aa20fa7-93e2-5fca-9bc0-fbd0db3c71a2"
+Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"

@@ -1,5 +1,3 @@
-Base.length(mps::LCROpenMPS) = length(mps.Γ)
-Base.IndexStyle(::Type{<:LCROpenMPS}) = IndexLinear()
 Base.getindex(mps::LCROpenMPS, i::Integer) = mps.Γ[i]
 function Base.setindex!(mps::LCROpenMPS, v, i::Integer)
     c = center(mps)
@@ -12,8 +10,6 @@ function Base.setindex!(mps::LCROpenMPS, v, i::Integer)
     end
     mps.Γ[i] = v
 end
-Base.firstindex(mps::LCROpenMPS) = 1
-Base.lastindex(mps::LCROpenMPS) = length(mps)
 Base.copy(mps::LCROpenMPS) = LCROpenMPS(copy(mps.Γ), truncation = copy(mps.truncation), error = copy(mps.error)) 
 center(mps::LCROpenMPS) = mps.center
 
@@ -40,32 +36,32 @@ function LCROpenMPS(
 end
 
 function LCROpenMPS(
-    M::Vector{OrthogonalLinkSite{T}};
+    M::BraOrKetWith(OrthogonalLinkSite);
     truncation::TruncationArgs = DEFAULT_OPEN_TRUNCATION,
     center=1, error=0.0,
-) where {T}
+)
     N = length(M)
-    Γ = Vector{GenericSite{T}}(undef, N)
+    Γ = Vector{GenericSite{eltype(M[1])}}(undef, N)
     for k in 1:N
         k<N && @assert data(M[k].Λ2) ≈ data(M[k+1].Λ1) "Error in constructing LCROpenMPS: Sites do not share links"
         if k<center
-            Γ[k] = M[k].Λ1*M[k].Γ
+            Γ[k] = GenericSite(M[k],:left)
         end
         if k>center
-            Γ[k] = M[k].Γ*M[k].Λ2
+            Γ[k] = GenericSite(M[k],:right)
         end
     end
     Γ[center] = M[center].Λ1 * M[center].Γ * M[center].Λ2
     LCROpenMPS(Γ, truncation=truncation, error = error)
 end
 
-function LCROpenMPS(
-    mps::OpenMPS;
-    center::Int = 1,
-    error = 0.0,
-)
-    LCROpenMPS(mps[1:end], truncation=mps.truncation, error = mps.error + error, center=center)
-end
+# function LCROpenMPS(
+#     mps::OpenMPS;
+#     center::Int = 1,
+#     error = 0.0,
+# )
+#     LCROpenMPS(mps[1:end], truncation=mps.truncation, error = mps.error + error, center=center)
+# end
 
 function shift_center_right!(mps::LCROpenMPS, method=:qr)
     c=center(mps)
@@ -214,144 +210,10 @@ function canonicalize(mps::LCROpenMPS; center=1)
     LCROpenMPS(Γ, truncation = mps.truncation, error = mps.error)
 end
 
-#%% Transfer  
-# transfer_matrix(mps::LCROpenMPS, mpo::MPOsite, site::Integer, direction=:left) = transfer_matrix(mps[site], mpo, direction)
-# transfer_matrix(mps::LCROpenMPS, site::Integer, direction=:left) = transfer_matrix(mps[site], direction) 
-
-
-#%% Expectation values
-# """ 
-#     expectation_value(mps::LCROpenMPS, op::Array{T_op,N_op}, site::Integer)
-
-# Return the expectation value of the gate starting at the `site`
-# """
-# function expectation_value(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer) where {T_op, N_op}
-#     opLength = length(op)
-#     mps = set_center(mps, site)
-#     sites = GenericSite.(mps[site:(site+opLength-1)])
-#     expectation_value(sites, op)
-# end
-
-# """
-#     expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer)
-
-# Return the expectation value of the mpo starting at `site`
-
-# See also: [`expectation_values`](@ref), [`expectation_value_left`](@ref)
-# """
-# function expectation_value(mps::LCROpenMPS, mpo::AbstractMPO, site::Integer = 1)
-#     oplength = length(mpo)
-#     T = transfer_matrix(mps,mpo,site,:right)
-#     dl = size(mps[site],1)
-#     dr = size(mps[site+oplength-1],3)
-#     L = T*vec(Matrix(1.0I,dl,dl))
-#     return tr(reshape(L,dr,dr))
-# end
-
-function expectation_value(mps::LCROpenMPS, op, site::Integer)
-    mps = set_center(mps, site)
-    return expectation_value(mps,op,site, iscanonical=true)
+function canonicalize!(mps::LCROpenMPS; center=1)
+    Γ = to_left_right_orthogonal(mps[1:length(mps)], center=center)
+    mps.Γ = Γ
+    mps.center = center
 end
 
-"""
-    norm(mps::LCROpenMPS)
-
-Return the norm of the mps
-"""
-function LinearAlgebra.norm(mps::LCROpenMPS)
-    T = eltype(data(mps[1]))
-    C = Array{T,2}(undef, 1, 1)
-    C[1, 1] = one(T)
-    N = length(mps)
-    function updateC(m,C)
-        @tensor Cout[-1, -2] := m[2, 3, -2] * C[1, 2] * conj(m[1, 3, -1])
-        return Cout
-    end
-    for i = 1:N
-        #@tensor C[-1, -2] := data(mps[i])[2, 3, -2] * C[1, 2] * conj(data(mps[i])[1, 3, -1])
-        C = updateC(data(mps[i]), C)
-    end
-    return C[1, 1]
-end
-
-"""
-    scalar_product(mps::LCROpenMPS, mps2::LCROpenMPS)
-
-Return the scalar product of the two mps's
-"""
-function scalar_product(mps::LCROpenMPS, mps2::LCROpenMPS)
-    T = eltype(data(mps[1]))
-    C = Array{T,2}(undef, 1, 1)
-    C[1, 1] = one(T)
-    N = length(mps)
-    function updateC(m1,m2,C)
-        @tensor Cout[-1, -2] := m1[2, 3, -2] * C[1, 2] * conj(m2[1, 3, -1])
-        return Cout
-    end
-    for i = 1:N
-        C = updateC(data(mps[i]),data(mps2[i]),C)
-        #@tensor C[-1, -2] := data(mps[i])[2, 3, -2] * C[1, 2] * conj(data(mps2[i])[1, 3, -1])
-    end
-    return C[1, 1]
-end
-
-# """
-#     transfer_matrix(mps::LCROpenMPS, op, site, direction = :left)
-
-# Return the transfer matrix at `site` with the operator sandwiched
-# """
-# function transfer_matrix(mps::LCROpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
-# 	oplength = Int(length(size(op))/2)
-# 	N = length(mps)
-#     if (site+oplength-1) >N
-#         error("Operator goes outside the chain.")
-#     end
-#     Γ = mps[site:(site+oplength-1)]
-#     return transfer_matrix(Γ,op,direction)
-# end
-
-# %% TEBD
-# """
-#     apply_layers(mps::LCROpenMPS,layers)
-
-# Modify the mps by acting with the layers of gates
-# """
-# function apply_layers(mps::LCROpenMPS, layers)
-#     omps = OpenMPS(mps)
-#     total_error = apply_layers!(omps, layers)
-#     return omps
-# end
-
-
-function apply_identity_layer(mpsin::LCROpenMPS; kwargs...)
-    truncation = get(kwargs, :truncation, mpsin.truncation)
-    mps = set_center(mpsin,1)
-    for k in 1:length(mps)-1
-        A, S, B,  err = apply_two_site_gate(mps[k], mps[k+1], IdentityGate(2), truncation)
-        mps.center += 1
-        mps[k] = A
-        mps[k+1] = S*B
-        mps.error += err
-    end
-    return mps
-end
-
-"""
-    apply_layers_nonunitary(mps::LCROpenMPS,layers)
-
-Modify the mps by acting with the nonunitary layers of gates
-"""
-function apply_layers_nonunitary(mps::LCROpenMPS, layers)
-    omps = OpenMPS(mps)
-    total_error = apply_layers_nonunitary!(omps, layers)
-    return omps
-end
-
-function entanglement_entropy(mpsin::LCROpenMPS, link::Integer)
-    N = length(mpsin)
-    @assert 0<link<N
-    mps = set_center(mpsin, link)
-    _,S,_ = svd(mps[link],:leftorthogonal)
-    return entropy(S)
-end
 entanglement_entropy(mps::LCROpenMPS) = entanglement_entropy(OpenMPS(mps))

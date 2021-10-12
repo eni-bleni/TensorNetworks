@@ -6,10 +6,6 @@ const DEFAULT_OPEN_TRUNCATION = TruncationArgs(
     DEFAULT_OPEN_TOL,
     DEFAULT_OPEN_NORMALIZATION,
 )
-
-Base.firstindex(mps::OpenMPS) = 1
-Base.lastindex(mps::OpenMPS) = length(mps.Γ)
-Base.IndexStyle(::Type{<:OpenMPS}) = IndexLinear()
 Base.getindex(mps::OpenMPS, i::Integer) = OrthogonalLinkSite(mps.Γ[i], mps.Λ[i], mps.Λ[i+1], check=false)
 
 function Base.setindex!(mps::OpenMPS, v::OrthogonalLinkSite{<:Number}, i::Integer)
@@ -71,14 +67,16 @@ Return a random mps
 function randomOpenMPS(N, d, D; T=ComplexF64, purification = false,
     truncation::TruncationArgs = DEFAULT_OPEN_TRUNCATION,
 )
-    Ms = Vector{GenericSite{T}}(undef, N)
-    for i = 1:N
-        Ms[i] = GenericSite(rand(T, i == 1 ? 1 : D, d, i == N ? 1 : D), purification)
-    end
+    # Ms = Vector{GenericSite{T}}(undef, N)
+    Ms = [randomGenericSite(i == 1 ? 1 : D, d, i == N ? 1 : D, T; purification=purification) for i in 1:N]
+    # for i = 1:N
+    #     Ms[i] = randomGenericSite( i == 1 ? 1 : D, d, i == N ? 1 : D, T; purification=purification)
+        
+    #     #GenericSite(rand(T, i == 1 ? 1 : D, d, i == N ? 1 : D), purification)
+    # end
     mps = OpenMPS(Ms, truncation = truncation)
     return mps
 end
-
 
 """
     identityOpenMPS(N, d; T= ComplexF64, trunc)
@@ -148,7 +146,7 @@ Calculate the ΓΛs from a list of right orthogonal tensors M.
 """
 function to_orthogonal_link_from_right_orth(M::Vector{GenericSite{T}}, trunc::TruncationArgs) where {T}
     N = length(M)
-    for k in 1:N
+    for k in 1:N 
         @assert isrightcanonical(M[k]) "Error in to_orthogonal_link: site is not rightorthogonal"
     end
     Γ = Vector{GenericSite{T}}(undef,N)
@@ -223,22 +221,22 @@ function apply_layers_nonunitary(mps::OpenMPS, layers)
 end
 
 
-"""
-    norm(mps::OpenMPS)
+# """
+#     norm(mps::OpenMPS)
 
-Return the norm of the mps
-"""
-function LinearAlgebra.norm(mps::OpenMPS)
-    C = Array{T,2}(undef, 1, 1)
-    T = eltype(data(mps[1]))
-    C[1, 1] = one(T)
-    N = length(mps.Γ)
-    M = centralize(mps, N)
-    for i = 1:N
-        @tensor C[-1, -2] := M[i][2, 3, -2] * C[1, 2] * conj(M[i][1, 3, -1])
-    end
-    return C[1, 1]
-end
+# Return the norm of the mps
+# """
+# function LinearAlgebra.norm(mps::OpenMPS)
+#     C = Array{T,2}(undef, 1, 1)
+#     T = eltype(data(mps[1]))
+#     C[1, 1] = one(T)
+#     N = length(mps.Γ)
+#     M = centralize(mps, N)
+#     for i = 1:N
+#         @tensor C[-1, -2] := M[i][2, 3, -2] * C[1, 2] * conj(M[i][1, 3, -1])
+#     end
+#     return C[1, 1]
+# end
 
 # """
 #     scalar_product(mps::OpenMPS, mps2::OpenMPS)
@@ -257,34 +255,35 @@ end
 #     return C[1, 1]
 # end
 
-set_center!(mps::OpenMPS,::Integer) = mps
-iscenter(mps::OpenMPS, ::Integer) = true
+# set_center!(mps::OpenMPS,::Integer) = mps
+# iscenter(mps::OpenMPS, ::Integer) = true
+set_center!(mps::BraOrKetWith(OrthogonalLinkSite), ::Integer) = mps
+iscenter(mps::BraOrKetWith(OrthogonalLinkSite), ::Integer) = true
+# """
+#     scalar_product(mps::OpenMPS, mps2::OpenMPS)
 
-"""
-    scalar_product(mps::OpenMPS, mps2::OpenMPS)
-
-Return the scalar product of the two mps's
-"""
-scalar_product(mps::OpenMPS, mps2::OpenMPS) = scalar_product(LCROpenMPS(mps), LCROpenMPS(mps2))
-scalar_product(mps::LCROpenMPS, mps2::OpenMPS) = scalar_product(mps, LCROpenMPS(mps2))
-scalar_product(mps::OpenMPS, mps2::LCROpenMPS) = scalar_product(LCROpenMPS(mps), mps2)
+# Return the scalar product of the two mps's
+# """
+# scalar_product(mps::OpenMPS, mps2::OpenMPS) = scalar_product(LCROpenMPS(mps), LCROpenMPS(mps2))
+# scalar_product(mps::LCROpenMPS, mps2::OpenMPS) = scalar_product(mps, LCROpenMPS(mps2))
+# scalar_product(mps::OpenMPS, mps2::LCROpenMPS) = scalar_product(LCROpenMPS(mps), mps2)
 
 # %% Transfer 
 
-"""
-    transfer_matrix(mps::OpenMPS, op, site, direction = :left)
+# """
+#     transfer_matrix(mps::OpenMPS, op, site, direction = :left)
 
-Return the transfer matrix at `site` with the operator sandwiched
-"""
-function transfer_matrix(mps::OpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
-	oplength = Int(length(size(op))/2)
-	N = length(mps)
-    if (site+oplength-1) >N
-        error("Operator goes outside the chain.")
-    end
-    sites = mps[site:(site+oplength-1)]
-    return transfer_matrix(sites,op,direction)
-end
+# Return the transfer matrix at `site` with the operator sandwiched
+# """
+# function transfer_matrix(mps::OpenMPS, op::AbstractGate{T_op,N_op}, site::Integer, direction = :left) where {T_op, N_op}
+# 	oplength = Int(length(size(op))/2)
+# 	N = length(mps)
+#     if (site+oplength-1) >N
+#         error("Operator goes outside the chain.")
+#     end
+#     sites = mps[site:(site+oplength-1)]
+#     return transfer_matrix(sites,op,direction)
+# end
 
 function saveOpenMPS(mps, filename)
     jldopen(filename, "w") do file

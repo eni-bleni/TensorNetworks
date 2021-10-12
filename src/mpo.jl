@@ -1,24 +1,23 @@
 #TODO compress MPO https://arxiv.org/pdf/1611.02498.pdf
 abstract type AbstractMPOsite{T} <: AbstractArray{T,4} end
 
-struct MPOsite{T<:Number} <: AbstractMPOsite{T}
+struct MPOsite{T} <: AbstractMPOsite{T}
     data::Array{T,4}
     # ishermitian::Bool
     # isunitary::Bool
 end
 Base.getindex(g::MPOsite, I::Vararg{Int,4}) = getindex(data(g),I...)
 
+MPOsite{K}(site::MPOsite,dir) where {K} = MPOsite{K}(data(site))
 
 function MPOsite(op::Array{<:Number,2})
     sop = size(op)
     return MPOsite(reshape(op,1,sop[1],sop[2],1))
 end
-function MPOsite(op::Array{T,4}) where {T}
-    return MPOsite{T}(op)
-end
+
 # function MPOsite(op::Array{<:Number,4})
 #     return MPOsite(op, norm(op - conj(permutedims(op,[1,3,2,4]))) ≈ 0)
-# end
+
 data(site::MPOsite) = site.data
 Base.eltype(::MPOsite{T}) where {T} = T
 # LinearAlgebra.ishermitian(site::MPOsite) = site.ishermitian
@@ -27,6 +26,8 @@ reverse_direction(site::MPOsite) = MPOsite(permutedims(data(site),[4,2,3,1]))
 Base.transpose(site::MPOsite) = MPOsite(permutedims(data(site),[1,3,2,4]))
 Base.adjoint(site::MPOsite) = MPOsite(conj(permutedims(data(site),[1,3,2,4])))
 Base.conj(site::MPOsite) = MPOsite(conj(data(site)))
+Base.permutedims(site::MPOsite, perm) = MPOsite(permutedims(site.data,perm))
+
 Base.:+(site1::MPOsite,site2::MPOsite) = MPOsite(data(site1) .+ data(site2)) 
 
 abstract type AbstractMPO{T<:Number} <: AbstractVector{MPOsite{T}} end
@@ -36,14 +37,16 @@ struct MPO{T<:Number} <: AbstractMPO{T}
 end
 
 struct ScaledIdentityMPOsite{T} <: AbstractMPOsite{T}
-    data::T
-    function ScaledIdentityMPOsite(scaling::T) where {T<:Number}
-        new{T}(scaling)
-    end
+    data::T 
+end
+function ScaledIdentityMPOsite(scaling::T) where {T<:Number}
+    ScaledIdentityMPOsite{T}(scaling)
 end
 data(site::ScaledIdentityMPOsite) = site.data
 const IdentityMPOsite = ScaledIdentityMPOsite(true)
 
+# MPOsite(s::ScaledIdentityMPOsite) = s
+# MPOsite{K}(s::ScaledIdentityMPOsite) where {K} = ScaledIdentityMPOsite{K}(data(s))
 Base.length(mpo::ScaledIdentityMPOsite) = 1
 function Base.size(::ScaledIdentityMPOsite, i::Integer)
     if i==1 || i==4
@@ -118,10 +121,10 @@ data(mpo::MPO) = mpo.data
 # HermitianMPO(ops::Array{Array{T,4},1}) where {T<:Number} = HermitianMPO(map(op->MPOsite(op),ops))
 
 Base.size(mposite::MPOsite) = size(data(mposite))
-Base.length(mpo::MPOsite) = 1
+# Base.length(mpo::MPOsite) = 1
 Base.size(mpo::AbstractMPO) = size(data(mpo))
-Base.length(mpo::MPO) = length(data(mpo))
-Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
+# Base.length(mpo::MPO) = length(data(mpo))
+# Base.IndexStyle(::Type{<:MPOsite}) = IndexLinear()
 Base.IndexStyle(::Type{<:AbstractMPO}) = IndexLinear()
 Base.getindex(mpo::MPOsite, i::Integer) = mpo.data[i]
 Base.getindex(mpo::AbstractMPO, i::Integer) = mpo.data[i]
@@ -180,17 +183,18 @@ end
 
 
 """
-```multiplyMPOs(mpo1,mpo2; c=true)```
+```multiplyMPOs(mpo1,mpo2)```
 """
-function multiplyMPOs(mpo1,mpo2; c=true) #FIXME
+function multiplyMPOs(mpo1,mpo2) 
     L = length(mpo1)
     mpo = similar(mpo1)
     for j=1:L
-        if c
-            @tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * conj(mpo2[j].data[-2,-4,1,-6])
-        else
-            @tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * mpo2[j].data[-2,1,-4,-6]
-        end
+        # if c
+        @tullio temp[l1,l2,u,d,r1,r2] := data(mpo1[j])[l1,u,c,r1] * data(mpo2[j])[l2,c,d,r2]
+            #@tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * conj(mpo2[j].data[-2,-4,1,-6])
+        # else
+        #     @tensor temp[:] := mpo1[j].data[-1,-3,1,-5] * mpo2[j].data[-2,1,-4,-6]
+        # end
         s=size(temp)
         mpo[j] = MPOsite(reshape(temp,s[1]*s[2],s[3],s[4],s[5]*s[6]))
     end

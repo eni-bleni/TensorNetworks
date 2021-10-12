@@ -3,14 +3,14 @@ const DEFAULT_UMPS_TOL = 1e-12
 const DEFAULT_UMPS_NORMALIZATION = true
 const DEFAULT_UMPS_TRUNCATION = TruncationArgs(DEFAULT_UMPS_DMAX, DEFAULT_UMPS_TOL, DEFAULT_UMPS_NORMALIZATION)
 isinfinite(::UMPS) = true
-Base.firstindex(mps::UMPS) = 1
-Base.lastindex(mps::UMPS) = length(mps.Γ)
-Base.IndexStyle(::Type{UMPS}) = IndexLinear()
+Base.eltype(::Type{UMPS}) = OrthogonalLinkSite
+
 function Base.getindex(mps::UMPS, i::Integer) 
 	i1 = mod1(i, length(mps))
 	i2 = mod1(i+1, length(mps))
 	return OrthogonalLinkSite(mps.Γ[i1], mps.Λ[i1], mps.Λ[i2])
 end
+Base.getindex(mps::UMPS, I) = [mps[i] for i in I]
 
 function Base.setindex!(mps::UMPS, v::OrthogonalLinkSite, i::Integer)
 	i1 = mod1(i, length(mps))
@@ -19,6 +19,7 @@ function Base.setindex!(mps::UMPS, v::OrthogonalLinkSite, i::Integer)
 	mps.Λ[i1] =  v.Λ1
 	mps.Λ[i2] =  v.Λ2
 end
+
 
 # %% Constructors
 function UMPS(Γ::Vector{Array{T,3}}, Λ::Vector{Vector{K}}; truncation::TruncationArgs = DEFAULT_UMPS_TRUNCATION, error = 0.0, purification=false) where {T,K}
@@ -47,10 +48,10 @@ end
 
 Convert `mps` to an UMPS{T} and return the result
 """
-function Base.convert(::Type{UMPS{T}}, mps::UMPS) where {T<:Number}
+function Base.convert(::Type{UMPS{T}}, mps::UMPS) where {T}
 	return UMPS(map(g-> convert.(T,g),mps.Γ), map(λ-> Base.convert.(T,λ), mps.Λ), mps)
 end
-function Base.convert(::Type{UMPS{T}}, mps::UMPS{T}) where {T<:Number}
+function Base.convert(::Type{UMPS{T}}, mps::UMPS{T}) where {T}
 	return mps
 end
 
@@ -124,13 +125,13 @@ function rotate(mps::UMPS,n::Integer)
 end
 
 # %% Transfer
-function transfer_matrix(mps::UMPS, gate::AbstractSquareGate, site::Integer, direction = :left)
-	oplength = length(gate)
-	if ispurification(mps)
-		gate = auxillerate(gate)
-	end
-    return transfer_matrix(mps[site:site+oplength-1],op,direction)
-end
+# function transfer_matrix(mps::UMPS, gate::AbstractSquareGate, site::Integer, direction = :left)
+# 	oplength = length(gate)
+# 	if ispurification(mps)
+# 		gate = auxillerate(gate)
+# 	end
+#     return transfer_matrix(mps[site:site+oplength-1],op,direction)
+# end
 
 
 """
@@ -138,7 +139,7 @@ end
 
 Return the spectrum of the transfer matrix of the UMPS
 """
-function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
+function transfer_spectrum(mps::UMPS{K}, direction::Symbol=:left; nev=1) where {K}
 	# if K == ComplexDF64
 	# 	@warn("converting ComplexDF64 to ComplexF64")
 	# 	mps = convert(UMPS{ComplexF64},mps)
@@ -165,19 +166,37 @@ function transfer_spectrum(mps::UMPS{K}, direction=:left; nev=1) where {K}
 	# end
 	nev = min(length(vals),nev)
 	tensors =  [reshape(vecs[:,k],D,D) for k in 1:nev]
+    return vals[1:nev], canonicalize_eigenoperator.(tensors) #canonicalize_eigenoperator.(tensors)
+end
+function transfer_spectrum(mps1::BraOrKetLike(UMPS), mps2::BraOrKetLike(UMPS), direction::Symbol=:left; nev=1)
+    T = transfer_matrix(mps1,mps2,direction)
+	D1 = size(mps1[end],3)
+	D2 = size(mps2[end],3)
+	nev = minimum([D1*D2, nev])
+    if D1*D2<20
+        vals, vecs = eigen(Matrix(T))
+        vals = vals[end:-1:1]
+        vecs = vecs[:,end:-1:1]
+    else
+		x0 = vec(Matrix{eltype(mps1[end])}(I,D1,D2))
+        vals, vecsvec = eigsolve(T,x0,nev, :LM)#eigs(T,nev=nev)
+		vecs = hcat(vecsvec...)
+    end
+	nev = min(length(vals),nev)
+	tensors =  [reshape(vecs[:,k],D1,D2) for k in 1:nev]
     return vals[1:nev], tensors #canonicalize_eigenoperator.(tensors)
 end
-
 """
 	transfer_spectrum(mps::UMPS, mpo::AbstractMPO, direction=:left; nev=1)
 
 Return the spectrum of the transfer matrix of the UMPS, with mpo sandwiched
 """
-function transfer_spectrum(mps::UMPS{K}, mpo::AbstractMPO, direction=:left; nev=1) where {K}
-    T = transfer_matrix(mps, mpo, direction)
+function transfer_spectrum(mps::BraOrKetLike(UMPS), mpo::AbstractMPO, mps2::BraOrKetLike(UMPS), direction::Symbol=:left; nev=1)
+    T = transfer_matrix(mps, mpo, mps2, direction)
 	DdD = size(T,1)
 	d = size(mpo[1],1)
-	D = Int(sqrt(N/d))
+	N = length(mpo)
+	D = Int(sqrt(DdD/d))
 	nev = minimum([DdD, nev])
     if N<10
         vals, vecs = eigen(Matrix(T))
@@ -195,12 +214,11 @@ function transfer_spectrum(mps::UMPS{K}, mpo::AbstractMPO, direction=:left; nev=
     return vals, tensors #canonicalize_eigenoperator.(tensors)
 end
 
-function LinearAlgebra.norm(mps::UMPS) #FIXME dont assume canonical
-	return sum(data(mps.Λ[1]) .^2)
-end
-
-
 function apply_layers(mps::UMPS, layers)
+    sites, err = apply_layers(mps[1:end], layers, mps.truncation, isperiodic=true)
+    return UMPS(sites, truncation=mps.truncation, error = mps.error + err)
+end
+function apply_layers!(mps::UMPS, layers)
     sites, err = apply_layers!(mps[1:end], layers, mps.truncation, isperiodic=true)
     return UMPS(sites, truncation=mps.truncation, error = mps.error + err)
 end
@@ -247,7 +265,7 @@ function canonicalize_cell!(mps::UMPS)
 	    X = Diagonal(sevr)[abs.(sevr) .> mps.truncation.tol,:] * Ur'
 	    Y = Diagonal(sevl)[abs.(sevl) .> mps.truncation.tol,:] * Ul'
 	end
-	F = svd(Y*Diagonal(data(mps.Λ[1]))*transpose(X))
+	F = svd(Y*data(mps.Λ[1])*transpose(X))
 
     #U,S,Vt,D,err = truncate_svd(F)
 
@@ -260,7 +278,7 @@ function canonicalize_cell!(mps::UMPS)
     # @tensor Γ[1][:] := VX[-1,1]*data(Γ[1])[1,-2,-3]
 	S = LinkSite(F.S)
 	if mps.truncation.normalize
-		Λ[1] = S / LinearAlgebra.norm(S)
+		Λ[1] = S / norm(S)
 	else
 		Λ[1] = S
 	end
@@ -307,10 +325,8 @@ function boundary(mps::UMPS)
 	rhoL =  reshape(rhoLs[:,1],DL,DL)
 	return rhoL, rhoR
 end
-transfer_matrix_bond(mps::UMPS, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
-transfer_matrix_bond(mps1::UMPS, mps2::UMPS, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
-transfer_matrix_bond(mps::ConjugateSite{<:UMPS}, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
-transfer_matrix_bond(mps1::ConjugateSite{<:UMPS}, mps2::UMPS, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
+# transfer_matrix_bond(mps::AbstractMPS{_braket(OrthogonalLinkSite)}, site::Integer, dir::Symbol) = (s =Diagonal(data(mps.Λ[site])); kron(s,s))
+# transfer_matrix_bond(mps1::AbstractMPS{_braket(OrthogonalLinkSite)}, mps2::AbstractMPS{_braket(OrthogonalLinkSite)}, site::Integer, dir::Symbol) = kron(Diagonal(data(mps1.Λ[site])),Diagonal(data(mps2.Λ[site])))
 
 # """ 
 # 	boundary(mps::UMPS, mpo::MPO) 
@@ -328,15 +344,11 @@ transfer_matrix_bond(mps1::ConjugateSite{<:UMPS}, mps2::UMPS, site::Integer, dir
 # 	rhoL =  reshape(rhoLs[:,1],DL,DmpoL,DL)
 # 	return rhoL, rhoR
 # end
-function boundary(mps::UMPS,mpo::AbstractMPO, side::Symbol)
-	_, rhos = transfer_spectrum(mps,mpo, reverse_direction(side),nev=2)
-	return canonicalize_eigenoperator(rhos[1])
-end
+# function boundary(mps::UMPS,mpo::AbstractMPO, side::Symbol)
+# 	_, rhos = transfer_spectrum(mps,mpo, reverse_direction(side),nev=2)
+# 	return canonicalize_eigenoperator(rhos[1])
+# end
 
-function boundary(mps::UMPS, side::Symbol)
-	_, rhos = transfer_spectrum(mps, reverse_direction(side),nev=2)
-	return canonicalize_eigenoperator(rhos[1])
-end
 
 
 #TODO Calculate expectation values and effective hamiltonian as in https://arxiv.org/pdf/1207.0652.pdf
@@ -363,7 +375,7 @@ function effective_hamiltonian(mps::UMPS{T}, mpo::AbstractMPO; direction=:left) 
 		rhoR[:,itr[k],:] = reshape(TL * vec(rhoR),sR)[:,itr[k],:]
 	end
 	C = rhoR[:,itr[1],:]
-	rho = Diagonal(data(mps.Λ[1]).^2)
+	rho = data(mps.Λ[1])^2
 	@tensor e0[:] := C[1,2]*rho[1,2]
 	idvec = vec(Matrix{T}(I,D,D))
 	function TI(v)
@@ -407,7 +419,7 @@ function canonicalize_cell(mps::UMPS)
 	    X = Diagonal(sevr)[abs.(sevr) .> mps.truncation.tol,:] * Ur'
 	    Y = Diagonal(sevl)[abs.(sevl) .> mps.truncation.tol,:] * Ul'
 	end
-	F = svd!(Y*Diagonal(data(mps.Λ[1]))*transpose(X))
+	F = svd!(Y*data(mps.Λ[1])*transpose(X))
 
     U,S,Vt,D,err = truncate_svd(F, mps.truncation)
 	Λ = LinkSite(S)
@@ -419,7 +431,7 @@ function canonicalize_cell(mps::UMPS)
     # @tensor Γcopy[end][:] := Γcopy[end][-1,-2,3]*YU[3,-3]
     # @tensor Γcopy[1][:] := VX[-1,1]*Γcopy[1][1,-2,-3]
 	if mps.truncation.normalize
-		Λcopy[1] = Λ / LinearAlgebra.norm(Λ)
+		Λcopy[1] = Λ / norm(Λ)
 	else
 		Λcopy[1] = Λ
 	end
@@ -460,7 +472,7 @@ function apply_mpo(mps::UMPS,mpo)
 		@tensor tens[:] := Γ[i][-1,c,-4]*mpo[i][-2,-3,c,-5]
 		st = size(tens)
 		Γout[i] = reshape(tens,st[1]*st[2],st[3],st[4]*st[5])
-		@tensor Λtemp[:] := Λ[i][-1]*ones(st[2])[-2]
+		@tensor Λtemp[:] := Λ[i][-1]*ones(st[2])[-2] #FIXME Λ is now a diagonal matrix
 		Λout[i] = reshape(Λtemp,st[1]*st[2])
 	end
 	return UMPS(Γout, Λout, mps)
@@ -529,7 +541,7 @@ end
 
 makes the dominant eigenvector hermitian
 """
-function canonicalize_eigenoperator(rho)
+function canonicalize_eigenoperator(rho::AbstractMatrix)
     trρ = tr(rho)
     phase = trρ/abs(trρ)
     rho = rho ./ phase

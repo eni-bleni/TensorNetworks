@@ -29,10 +29,10 @@ function TEBD!(mps::AbstractMPS, ham; total_time, steps, increment, observables,
 end
 
 
-function apply_layer(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
+function apply_layer(sites::AbstractVector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
 	N = length(sites)
 	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
+		@error "Cell size should be even to be consistent with trotter decomposition"
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
 	newsites = similar(sites)
@@ -53,30 +53,30 @@ function apply_layer(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncat
 	return newsites, total_error[]
 end
 
-apply_identity_layer(sites::Vector{<:OrthogonalLinkSite}, parity, truncation; kwargs...) = apply_layer(sites, [IdentityGate(2) for k in 1:length(sites)], parity,truncation;kwargs...)	
+apply_identity_layer(sites::AbstractVector{<:OrthogonalLinkSite}, parity, truncation; kwargs...) = apply_layer(sites, [IdentityGate(2) for k in 1:length(sites)], parity,truncation;kwargs...)	
 
-function apply_layer!(sites::Vector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
+function apply_layer!(sites::AbstractVector{<:OrthogonalLinkSite}, gates, parity, truncation; isperiodic=false)
 	N = length(sites)
 	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
+		@error "Cell size should be even to be consistent with trotter decomposition"
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
 	total_error = Threads.Atomic{Float64}(0.0)
 	Threads.@threads for k in itr
 		sites[k], sites[k+1], error = apply_two_site_gate(sites[k],sites[k+1], gates[k], truncation)
-		Threads.atomic_add!(total_error, real(error))
+		Threads.atomic_add!(total_error, Float64(error))
 	end
 	if isperiodic && iseven(parity)
 		sites[N], sites[1], error = apply_two_site_gate(sites[N], sites[1], gates[N], truncation)
-		Threads.atomic_add!(total_error, real(error))
+		Threads.atomic_add!(total_error, Float64(error))
 	end
 	return sites, total_error[]
 end
 
-function apply_layer_nonunitary!(sites::Vector{<:OrthogonalLinkSite}, gates, parity, dir, truncation; isperiodic=false)
+function apply_layer_nonunitary!(sites::AbstractVector{<:OrthogonalLinkSite}, gates, parity, dir, truncation; isperiodic=false)
 	N = length(sites)
 	if isodd(N)
-		error("Cell size should be even to be consistent with trotter decomposition")
+		@error "Cell size should be even to be consistent with trotter decomposition"
 	end
 	itr = isodd(parity) ? (1:2:N-1) : (2:2:N-2)
 	itr = (dir==-1 ? itr : reverse(itr))
@@ -107,7 +107,7 @@ end
 
 Modify the mps by acting with the nonunitary layers of gates
 """
-function apply_layers_nonunitary(sitesin::Vector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
+function apply_layers_nonunitary(sitesin::AbstractVector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
     total_error = 0.0
 	sites = copy(sitesin)
     for n = 1:length(layers)
@@ -118,14 +118,18 @@ function apply_layers_nonunitary(sitesin::Vector{<:OrthogonalLinkSite}, layers, 
     return sites, total_error
 end
 
-"""
-    apply_layers_nonunitary!(mps,layers)
 
-Modify the mps by acting with the nonunitary layers of gates
-"""
-function apply_layers(sitesin::Vector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
+function apply_layers(sitesin::AbstractVector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
     total_error = 0.0
 	sites = copy(sitesin)
+    for n = 1:length(layers)
+        _, error  = apply_layer!(sites, layers[n], n, truncation, isperiodic=isperiodic)
+        total_error += error
+    end
+    return sites, total_error
+end
+function apply_layers!(sites::AbstractVector{<:OrthogonalLinkSite}, layers, truncation; isperiodic=false)
+    total_error = 0.0
     for n = 1:length(layers)
         _, error  = apply_layer!(sites, layers[n], n, truncation, isperiodic=isperiodic)
         total_error += error

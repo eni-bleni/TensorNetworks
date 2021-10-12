@@ -1,8 +1,11 @@
 function reverse_direction(dir::Symbol)
-	if dir==:left 
-		return :right
-	elseif dir==:right
+	if dir ==:right
 		return :left
+	else
+		if dir!==:left
+			@warn "No direction chosen in reverse_direction. Defaulting to :left"
+		end
+		return :right
 	end
 end
 
@@ -20,7 +23,7 @@ function truncate_svd(F, args::TruncationArgs)
 	err = sum(F.S[D+1:end].^2) + sum(S[S .< tol].^2)
 	S = S[S .> tol]
 	if args.normalize
-		S = S ./ LinearAlgebra.norm(S)
+		S = S ./ norm(S)
 	end
 	D = length(S)
 	@views return F.U[:, 1:D], S, F.Vt[1:D, :], D,err
@@ -36,6 +39,7 @@ function split_truncate!(theta, args::TruncationArgs)
 	#D1l,d,d,D2r = size(theta)
     #theta = reshape(theta, D1l*d,d*D2r)
 	F = try
+		# println(real(theta))
         svd!(theta)
     catch y
         svd!(theta,alg=LinearAlgebra.QRIteration())
@@ -46,10 +50,16 @@ end
 
 
 function isleftcanonical(data)
-	@tensor id[:] := conj(data[1,2,-1])*data[1,2,-2]
+	s = size(data)
+	m = reshape(data,s[1]*s[2],s[3])
+	id = m'*m
+	#@tensor id[:] := conj(data[1,2,-1])*data[1,2,-2]
 	return id ≈ one(id)
-end 
+end  
 function isrightcanonical(data)
-	@tensor id[:] := conj(data[-1,2,1])*data[-2,2,1]
+	s = size(data)
+	m = reshape(data,s[1],s[2]*s[3])
+	id = m*m'
+	#@tensor id[:] := conj(data[-1,2,1])*data[-2,2,1]
 	return id ≈ one(id)
 end 

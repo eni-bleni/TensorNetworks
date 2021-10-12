@@ -19,10 +19,9 @@ function constr_u()
 end
 
 """ returns the dim=2 isometry w and disentangler u for the critical Ising model"""
-function constr_wu_dim2()
-    w = constr_w_theta(pi/12)
-    u = constr_u_theta(-pi/6)
-
+function constr_wu_dim2(type=ComplexF64)
+    w = constr_w_theta(type(pi)/12)
+    u = constr_u_theta(-type(pi)/6)
     return w, u
 end
 

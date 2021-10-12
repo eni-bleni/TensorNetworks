@@ -11,7 +11,7 @@ mutable struct SubspaceExpand <: AbstractMixer
         return new(alpha, rate, nothing)
     end
 end
-SubspaceExpand(alpha) = SubspaceExpand(alpha,3/4)
+SubspaceExpand(alpha) = SubspaceExpand(alpha,9/10)
 
 function shift_center!(mps,j,dir,::ShiftCenter; kwargs...)
     if dir==:right 
@@ -32,16 +32,16 @@ function shift_center!(mps,j,dir,SE::SubspaceExpand; mpo,env, kwargs...)
         j1 = j-1
         j2 = j
     end
-
     A,B = subspace_expand(SE.alpha,mps[j],mps[j+dirval],env[j, reverse_direction(dir)], mpo[j], mps.truncation, dir)
     mps.center+=dirval
     mps.Γ[j] = A
     mps.Γ[j+dirval] = B
-    T = transfer_matrix(adjoint.(mps[j1:j2]), mpo[j1:j2],mps[j1:j2], :left)
+    T = prod(transfer_matrices(adjoint.(mps[j1:j2]), mpo[j1:j2],mps[j1:j2], :left))
     truncmin = transpose( T*vec(env.R[j2])) * vec(env.L[j1])
     
+  
     if SE.oldmin !== nothing
-        if abs((truncmin - newmin)/(SE.oldmin - newmin)) >.3 
+        if real((truncmin - newmin)/(SE.oldmin - newmin)) >.3 
             SE.alpha *= SE.rate
         else
             SE.alpha *= 1/SE.rate
@@ -55,16 +55,22 @@ function iterative_compression(target::AbstractMPS, guess::AbstractMPS, prec=1e-
     # mps = guess
 #    mps = iscanonical(guess) ? guess :  canonicalize(guess)
     mps = canonicalize(guess)
-    
     set_center!(mps,1)
     dir = :right
-    targetnorm = norm(target)
-    IL(site) = Array(vec(Diagonal(1.0I,size(site,1)))) 
-    IR(site) = Array(vec(Diagonal(1.0I,size(site,3))))
-    errorfunc(mps) = 1 - abs(scalar_product(target,mps))#real(targetnorm - sum([transpose(transfer_matrix(site) * IR(site))*IL(site) for site in mps[1:end]]))
+    #targetnorm = norm(target)
+    # IL(site) = Array(vec(Diagonal{eltype(guess[1])}(I,size(site,1))))
+    # IR(site) = Array(vec(Diagonal{eltype(guess[1])}(I,size(site,3))))
+    errorfunc(mps) = 1 - abs(scalar_product(target',mps)) #FIXME can save memory by using precomputed envuronments
+    
+    #TODO Make it work for UMPS. The following errorfunction can be used
+    #density_matrix(mps,k) = @tensor rho[:] := data(mps[k])[1,-1,2]*conj(data(mps[k])[1,-2,2])
+    #errorfunc(mps) = real(1- sum([tr(density_matrix(target,k)*density_matrix(mps,k)) for k in 1:length(mps)]))
+    
+    #real(targetnorm - sum([transpose(transfer_matrix(site) * IR(site))*IL(site) for site in mps[1:end]]))
+    #if isinfinite(target)
     count=1
     error = errorfunc(mps)
-    error = error 
+    # error = error 
     println(error)
     while error > prec && count<maxiter
         mps, env = sweep(target,mps,env,dir, prec)

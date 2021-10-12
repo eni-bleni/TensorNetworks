@@ -4,7 +4,8 @@
 Return the Ising hamiltonian as a list of matrices
 """
 function isingHamBlocks(L,J,h,g)
-    blocks = Array{Array{ComplexF64,2},1}(undef,L-1)
+    T = promote_type(eltype.((J,h,g))...)
+    blocks = Vector{Array{T,2}}(undef,L-1)
     for i=1:L-1
         if i==1
             blocks[i] = -(J*ZZ + h/2*(2XI+IX) + g/2*(2*ZI+IZ))
@@ -23,7 +24,8 @@ end
 Return the Ising hamiltonian as a list of 2-site gates
 """
 function isingHamGates(L,J,h,g)
-    gates = Vector{GenericSquareGate{ComplexF64,4}}(undef,L-1)
+    T = promote_type(eltype.((J,h/2,g/2))...)
+    gates = Vector{GenericSquareGate{T,4}}(undef,L-1)
     for i=1:L-1
         if i==1
             gate = reshape(-(J*ZZ + h/2*(2XI+IX) + g/2*(2*ZI+IZ)),2,2,2,2)
@@ -83,14 +85,15 @@ IsingMPO(lattice sites, J, transverse, longitudinal[, shift=0])
 Returns the Ising hamiltonian as an MPO
 """
 function IsingMPO(L, J, h, g, shift=0)
-    mpo = Vector{Array{ComplexF64,4}}(undef,L)
-    mpo[1] = zeros(ComplexF64,1,2,2,3)
+    T = promote_type(eltype.((J,h,g))...)
+    mpo = Vector{Array{T,4}}(undef,L)
+    mpo[1] = zeros(T,1,2,2,3)
     mpo[1][1,:,:,:] = reshape([si -J*sz -h*sx-g*sz+shift*si/L],2,2,3)
-    mpo[L] = zeros(ComplexF64,3,2,2,1)
+    mpo[L] = zeros(T,3,2,2,1)
     mpo[L][:,:,:,1] = permutedims(reshape([-h*sx-g*sz+shift*si/L sz si], 2,2,3), [3,1,2])
     for i=2:L-1
         # hardcoded implementation of index structure (a,i,j,b):
-        help = zeros(ComplexF64,3,2,2,3)
+        help = zeros(T,3,2,2,3)
         help[1,:,:,1] = help[3,:,:,3] = si
         help[1,:,:,2] = -J*sz
         help[1,:,:,3] = -h*sx-g*sz+shift*si/L

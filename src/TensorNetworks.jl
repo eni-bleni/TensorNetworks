@@ -4,10 +4,13 @@ using TensorOperations
 using LinearMaps
 # using DataFrames
 using KrylovKit
-# using DoubleFloats
+using DoubleFloats
+using ArnoldiMethod
+using GenericSchur
 # using Combinatorics
 # using SparseArrays
 using SparseArrayKit
+using Tullio
 # using ProgressMeter
 
 # import Distributed.pmap
@@ -31,7 +34,7 @@ export scalar_product, set_center, set_center!, entanglement_entropy
 export entanglement_entropy, IdentityGate, data, compress, qubit
 export randomRightOrthogonalSite, randomLeftOrthogonalSite, randomOrthogonalLinkSite, randomGenericSite
 export IdentityMPOsite, environment, update_environment!
-export ShiftCenter, SubspaceExpand
+export ShiftCenter, SubspaceExpand, getindex, setindex!, kron,repeatedgate 
 
 include("types.jl")
 include("pauli.jl")

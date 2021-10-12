@@ -24,11 +24,12 @@ Base.length(env::AbstractEnvironment) = length(env.L)
 finite_environment(L::Vector{Array{T,N}}, R::Vector{Array{T,N}}) where {T,N} = DenseFiniteEnvironment(L, R)
 infinite_environment(L::Vector{Array{T,N}}, R::Vector{Array{T,N}}) where {T,N} = DenseInfiniteEnvironment(L, R)
 
-function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mps2::AbstractMPS, dir::Symbol)
-    Ts = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
-    V = boundary(mps1, mpo, mps2, dir)
+function halfenvironment(mps1::BraOrKetOrVec, mpo::AbstractMPO, mps2::BraOrKetOrVec, dir::Symbol)
+    T = numtype(mps1)
+    Ts::Vector{LinearMap{T}} = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
+    V::Vector{T} = boundary(mps1, mpo, mps2, dir)
     N = length(mps1)
-    env = Vector{Array{eltype(mps1[1]),3}}(undef,N)
+    env = Vector{Array{T,3}}(undef,N)
     if dir==:left
         itr = 1:N
         s1 = 1
@@ -40,20 +41,21 @@ function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mp
     else
         @error "In environment: choose direction :left or :right"
     end
-    Vsize(k) = (size(mps1[k],s1), size(mpo[k],s2), size(mps2[k],s1))
+    #Vsize(k) = (size(mps1[k],s1), size(mpo[k],s2), size(mps2[k],s1))
     for k in itr
-        env[k] = reshape(V,Vsize(k))
+        env[k] = reshape(V,size(mps1[k],s1), size(mpo[k],s2), size(mps2[k],s1))
         if k != itr[end]
             V = Ts[k]*V
         end
     end
     return env
 end
-function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::ScaledIdentityMPO, mps2::AbstractMPS, dir::Symbol)
-    Ts = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
-    V = boundary(mps1,mpo,mps2,dir)
+function halfenvironment(mps1::BraOrKetOrVec, mpo::ScaledIdentityMPO, mps2::BraOrKetOrVec, dir::Symbol)
+    T = numtype(mps1)
+    Ts::Vector{LinearMap{T}} = transfer_matrices(mps1, mpo, mps2, reverse_direction(dir))
+    V::Vector{T} = vec(boundary(mps1,mpo,mps2,dir))
     N = length(mps1)
-    env = Vector{Array{eltype(mps1[1]),2}}(undef,N)
+    env = Vector{Array{T,2}}(undef,N)
     if dir==:left
         itr = 1:N
         s = 1
@@ -63,9 +65,9 @@ function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::ScaledIdentityM
     else
         @error "In environment: choose direction :left or :right"
     end
-    Vsize(k) = (size(mps1[k],s), size(mps2[k],s))
+    #Vsize(k) = (size(mps1[k],s), size(mps2[k],s))
     for k in itr
-        env[k] = reshape(V,Vsize(k))
+        env[k] = reshape(V,size(mps1[k],s), size(mps2[k],s))
         if k != itr[end]
             V = Ts[k]*V
         end
@@ -73,12 +75,12 @@ function halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::ScaledIdentityM
     return env
 end
 
-halfenvironment(mps1::ConjugateMPS{<:AbstractMPS}, mps2::AbstractMPS, dir::Symbol) = halfenvironment(mps1, IdentityMPO(length(mps1)), mps2, dir)
-halfenvironment(mps::AbstractMPS, mpo::AbstractMPO, dir::Symbol) = halfenvironment(mps', mpo, mps, dir)
-halfenvironment(mps::AbstractMPS, dir::Symbol) = halfenvironment(mps', IdentityMPO(length(mps)), mps, dir)
+halfenvironment(mps1::BraOrKetOrVec, mps2::BraOrKetOrVec, dir::Symbol) = halfenvironment(mps1, IdentityMPO(length(mps1)), mps2, dir)
+halfenvironment(mps::BraOrKetOrVec, mpo::AbstractMPO, dir::Symbol) = halfenvironment(mps', mpo, mps, dir)
+halfenvironment(mps::BraOrKetOrVec, dir::Symbol) = halfenvironment(mps', IdentityMPO(length(mps)), mps, dir)
 
 
-function environment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mps2::AbstractMPS)
+function environment(mps1::BraOrKetOrVec, mpo::AbstractMPO, mps2::BraOrKetOrVec)
     L = halfenvironment(mps1,mpo,mps2,:left)
     R = halfenvironment(mps1,mpo,mps2,:right)
     if isinfinite(mps1)
@@ -88,9 +90,9 @@ function environment(mps1::ConjugateMPS{<:AbstractMPS}, mpo::AbstractMPO, mps2::
     end
 end
 
-environment(mps1::ConjugateMPS{<:AbstractMPS}, mps2::AbstractMPS) = environment(mps1, IdentityMPO(length(mps1)), mps2)
-environment(mps::AbstractMPS, mpo::AbstractMPO) = environment(mps', mpo, mps)
-environment(mps::AbstractMPS) = environment(mps', IdentityMPO(length(mps)), mps)
+environment(mps1::BraOrKetOrVec, mps2::BraOrKetOrVec) = environment(mps1, IdentityMPO(length(mps1)), mps2)
+environment(mps::BraOrKetOrVec, mpo::AbstractMPO) = environment(mps', mpo, mps)
+environment(mps::BraOrKetOrVec) = environment(mps', IdentityMPO(length(mps)), mps)
 
 # function update_environment!(env::AbstractFiniteEnvironment, mps1::AbstractSite, mpo::AbstractMPOsite, mps2::AbstractSite, site::Integer)
 #     site == length(env) || (env.L[site+1] = reshape(transfer_matrix(mps1, mpo, mps2, :right)*vec(env.L[site]), size(mps1,3), size(mpo,4), size(mps2,3)))
@@ -100,19 +102,19 @@ environment(mps::AbstractMPS) = environment(mps', IdentityMPO(length(mps)), mps)
 
 function update_left_environment!(env::AbstractFiniteEnvironment,j::Integer, sites::Vararg{Union{AbstractSite,AbstractMPOsite}})
     sl = [size(site)[end] for site in sites]
-    j== length(env) || (env.L[j+1] = reshape(transfer_matrix(sites,:right)*vec(env.L[j]), sl...))
+    j== length(env) || (env.L[j+1] = reshape(_local_transfer_matrix(sites,:right)*vec(env.L[j]), sl...))
     return 
 end
 function update_right_environment!(env::AbstractFiniteEnvironment,j::Integer, sites::Vararg{Union{AbstractSite,AbstractMPOsite}})
     sr = [size(site)[1] for site in sites]
-    j == 1 || (env.R[j-1] = reshape(transfer_matrix(sites, :left)*vec(env.R[j]), sr...))
+    j == 1 || (env.R[j-1] = reshape(_local_transfer_matrix(sites, :left)*vec(env.R[j]), sr...))
     return 
 end
 function update_environment!(env::AbstractFiniteEnvironment,j::Integer, sites::Vararg{Union{AbstractSite,AbstractMPOsite}})
     sl = [size(site)[end] for site in sites]
     sr = [size(site)[1] for site in sites]
-    j == length(env) || (env.L[j+1] = reshape(transfer_matrix(sites, :right)*vec(env.L[j]), sl...))
-    j == 1 || (env.R[j-1] = reshape(transfer_matrix(sites, :left)*vec(env.R[j]), sr...))
+    j == length(env) || (env.L[j+1] = reshape(_local_transfer_matrix(sites, :right)*vec(env.L[j]), sl...))
+    j == 1 || (env.R[j-1] = reshape(_local_transfer_matrix(sites, :left)*vec(env.R[j]), sr...))
     return 
 end
 
@@ -126,14 +128,14 @@ update_environment!(env::AbstractFiniteEnvironment, mps::AbstractSite, site::Int
 #     return 
 # end
 
-
-local_mul(envL,envR,mposite::AbstractMPOsite,site::Array{<:Number,3}) =  @tensor temp[:] := (envL[-1,2,3]* data(mposite)[2,-2,4,5]) *(site[3,4,1]*envR[-3,5,1])    
+#TODO check performance and compare to matrix multiplication and Tullio
+local_mul(envL,envR,mposite::AbstractMPOsite,site::AbstractArray{<:Number,3}) =  @tensor temp[:] := (envL[-1,2,3]* data(mposite)[2,-2,4,5]) *(site[3,4,1]*envR[-3,5,1])    
 local_mul(envL,envR,mposite::AbstractMPOsite,site::GenericSite) = GenericSite(local_mul(envL,envR,mposite,data(site)), ispurification(site))
 local_mul(envL,envR,mposite::AbstractMPOsite,site::OrthogonalLinkSite) = local_mul(envL,envR, mposite, site.Λ1*site*site.Λ2)
    
 local_mul(envL,envR,site::Array{<:Number,3}) =  @tensor temp[:] := envL[-1,1]*site[1,-2,2]*envR[-3,2]
 local_mul(envL,envR,site::GenericSite) = GenericSite(local_mul(envL,envR,data(site)), ispurification(site))
-local_mul(envL,envR,site::OrthogonalLinkSite) = local_mul(envL,envR, site.Λ1*site*site.Λ2)
+local_mul(envL,envR,site::OrthogonalLinkSite) = local_mul(envL,envR, site.Λ1*site.Γ*site.Λ2)
 
 function Base.getindex(env::AbstractEnvironment,i::Integer, dir::Symbol)
     if dir==:left

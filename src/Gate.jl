@@ -15,8 +15,36 @@ Base.:*(g::GenericSquareGate, x::K) where {K<:Number} = GenericSquareGate(x*data
 Base.:/(g::GenericSquareGate, x::K) where {K<:Number} = inv(x)*g
 Base.:/(g::ScaledIdentityGate, x::K) where {K<:Number} = inv(x)*g
 
-function Base.:*(g1::GenericSquareGate{T,N},g2::GenericSquareGate{K,N}) where {T,K,N}
+function Base.:*(g1::GenericSquareGate{<:Any,N}, g2::GenericSquareGate{<:Any,N}) where {N}
 	Gate(gate(Matrix(g1)*Matrix(g2), Int(N/2)))
+end
+Base.:*(g1::AbstractSquareGate{<:Any,N}, g2::ScaledIdentityGate{<:Any,N}) where {N} = g1*data(g2)
+Base.:*(g2::ScaledIdentityGate{<:Any,N}, g1::AbstractSquareGate{<:Any,N}) where {N} = g1*data(g2)
+
+""" 
+	kron(g1::AbstractSquareGate, g2::AbstractSquareGate)
+
+Order is consistent with Base.kron.
+"""
+function Base.kron(g1::AbstractSquareGate, g2::AbstractSquareGate)
+	s1 = [size(g1)...]
+	s2 = [size(g2)...]
+	l1 = length(g1)
+	l2 = length(g2)
+	return Gate(reshape(kron(data(g1),data(g2)), [s1[1:l1]; s2[1:l2]; s1[l1+1:end]; s2[l2+1:end]]...))
+end
+function Base.kron(g1::ScaledIdentityGate, g2::ScaledIdentityGate)
+	l1 = length(g1)
+	l2 = length(g2)
+	return data(g1)*data(g2)*IdentityGate(l1+l2)
+end
+
+function repeatedgate(g::AbstractSquareGate,n)
+	gout = deepcopy(g)
+	for k in 1:n-1
+		gout = kron(g,gout)
+	end
+	return gout
 end
 
 Base.:+(g1::GenericSquareGate{K,N}, g2::GenericSquareGate{T,N}) where {T,K,N} = GenericSquareGate(data(g1)+ data(g2))
@@ -37,6 +65,8 @@ data(gate::GenericSquareGate) = gate.data
 data(gate::ScaledIdentityGate) = gate.data
 
 Base.convert(::Type{GenericSquareGate{T,N}}, g::GenericSquareGate{K,N}) where {T,K,N} = GenericSquareGate(convert.(T,g.data))
+Base.convert(::Type{<:GenericSquareGate}, m::Matrix{<:Any}) = GenericSquareGate(m)
+
 Base.permutedims(g::GenericSquareGate, perm) = GenericSquareGate(permutedims(g.data,perm))
 
 LinearAlgebra.Hermitian(squareGate::AbstractSquareGate) = (squareGate + squareGate')/2

@@ -2,48 +2,67 @@ Base.permutedims(site::GenericSite, perm) = GenericSite(permutedims(site.Γ,perm
 Base.copy(site::OrthogonalLinkSite) = OrthogonalLinkSite([copy(getfield(site, k)) for k = 1:length(fieldnames(OrthogonalLinkSite))]...) 
 Base.copy(site::GenericSite) = GenericSite([copy(getfield(site, k)) for k = 1:length(fieldnames(GenericSite))]...) 
 
+Base.@propagate_inbounds Base.getindex(site::AbstractSite, I...) = getindex(data(site),I...)
+Base.@propagate_inbounds Base.getindex(site::AdjointSite, I...) = getindex(site.parent,I...)
+
 Base.size(site::AbstractSite, dim) = size(data(site), dim)
 Base.size(site::AbstractSite) = size(data(site))
-Base.size(site::ConjugateSite) = size(site.site)
-Base.size(site::ConjugateSite,dim) = size(site.site,dim)
+Base.size(site::AdjointSite) = size(site.parent)
+Base.size(site::AdjointSite, dim) = size(site.parent,dim)
 Base.size(site::OrthogonalLinkSite) = size(site.Γ)
 Base.size(site::OrthogonalLinkSite, dim) = size(site.Γ, dim)
 Base.size(site::VirtualSite, dim) = size(site.Λ, dim)
 Base.size(site::VirtualSite) = size(site.Λ)
 Base.length(site::LinkSite) = length(site.Λ)
 
-Base.isapprox(s1::AbstractSite,s2::AbstractSite) = isapprox(data(s1),data(s2))
+#Base.isapprox(s1::AbstractSite,s2::AbstractSite) = isapprox(data(s1),data(s2))
 Base.isapprox(s1::OrthogonalLinkSite, s2::OrthogonalLinkSite) = isapprox(s1.Γ, s2.Γ) && isapprox(s1.Λ1, s2.Λ1) && isapprox(s1.Λ2, s2.Λ2)
 ispurification(site::GenericSite) = site.purification
 ispurification(site::OrthogonalLinkSite) = ispurification(site.Γ)
 
+link(site::GenericSite, dir) = I
+link(site::AdjointSite, dir) = link(site.parent, dir)'
+function link(site::OrthogonalLinkSite,dir)
+	if dir==:left
+		site.Λ1
+	elseif dir == :right
+		site.Λ2
+	else 
+		error("Choose direction :left or :right")
+	end
+end
 data(site::GenericSite) = site.Γ
 data(site::VirtualSite) = site.Λ
 data(site::LinkSite) = site.Λ
-data(site::ConjugateSite) = conj(data(site.site))
+data(site::AdjointSite) = conj(data(site.parent))
 data(site::GenericSite,dir) = site.Γ
 data(site::OrthogonalLinkSite, dir) = data(GenericSite(site,dir))
 data(site::VirtualSite, dir) = site.Λ
 data(site::LinkSite, dir) = site.Λ
-data(site::ConjugateSite{},dir) = conj(data(site.site,dir))
-# data(site::OrthogonalLinkSite, dir) = GenericSite
-# data(site::ConjugateSite{<:GenericSite}) = conj(data(site.site))
+data(site::AdjointSite,dir) = conj(data(site.parent,dir))
+data(site::OrthogonalLinkSite) = data(site.Λ1*site.Γ*site.Λ2)
+# data(site::AdjointSite) = conj(data(site.site))
 
 MPOsite(site::GenericSite) = (s = size(site); MPOsite(reshape(data(site),s[1],s[2],1,s[3])))
 MPOsite(site::GenericSite, dir) = MPOsite(site)
-MPOsite(site::ConjugateSite{<:GenericSite}) = (s = size(site); MPOsite(reshape(data(site),s[1],1,s[2],s[3])))
-MPOsite(site::ConjugateSite{<:GenericSite},dir) =  MPOsite(site)
+MPOsite(site::AdjointSite) = conj(permutedims(MPOsite(site.parent),[1,3,2,4]))
+MPOsite(site::AdjointSite, dir) =  conj(permutedims(MPOsite(site.parent,dir),[1,3,2,4]))
 MPOsite(site::OrthogonalLinkSite,dir) = MPOsite(GenericSite(site,dir),dir)
-MPOsite(site::ConjugateSite{<:OrthogonalLinkSite},dir) = MPOsite(GenericSite(site.site,dir)',dir)
+
+MPOsite{K}(site::GenericSite) where {K} = (s = size(site); MPOsite{K}(reshape(data(site),s[1],s[2],1,s[3])))
+MPOsite{K}(site::GenericSite, dir) where {K} = MPOsite{K}(site)
+MPOsite{K}(site::AdjointSite) where {K} = conj(permutedims(MPOsite{K}(site.parent),[1,3,2,4]))
+MPOsite{K}(site::AdjointSite, dir) where {K} =  conj(permutedims(MPOsite{K}(site.parent,dir),[1,3,2,4]))
+MPOsite{K}(site::OrthogonalLinkSite,dir) where {K} = MPOsite{K}(GenericSite(site,dir),dir)
+# MPOsite(site::BraSite{<:OrthogonalLinkSite},dir) = MPOsite(GenericSite(site.site,dir)',dir)
 #MPOsite(site::AbstractSite, dir::Symbol) = MPOsite(GenericSite(site,dir))
 
-Base.adjoint(site::AbstractSite) = ConjugateSite(site)
-Base.adjoint(site::ConjugateSite) = site.site
+# Base.adjoint(site::AbstractSite) = BraSite(site)
+# Base.adjoint(site::BraSite) = site.site
 
-Base.sqrt(site::LinkSite) = LinkSite(sqrt.(data(site)))
+Base.sqrt(site::LinkSite) = LinkSite(sqrt(data(site)))
 
-
-ispurification(site::ConjugateSite) = ispurification(site.site)
+ispurification(site::AdjointSite) = ispurification(site.parent)
 
 isleftcanonical(site::AbstractSite)  = isleftcanonical(data(site))
 isleftcanonical(site::OrthogonalLinkSite) = isleftcanonical(site.Λ1*site.Γ)
@@ -51,23 +70,26 @@ isrightcanonical(site::AbstractSite) = isrightcanonical(data(site))
 isrightcanonical(site::OrthogonalLinkSite) = isrightcanonical(site.Γ*site.Λ2)
 iscanonical(site::OrthogonalLinkSite) = isrightcanonical(site) && isleftcanonical(site) && norm(site.Λ1) ≈ 1 && norm(site.Λ2) ≈ 1
 
-entanglement_entropy(Λ::LinkSite) = -sum(data(Λ) .* log.(data(Λ)))
+entanglement_entropy(Λ::LinkSite) = -sum(data(Λ) * log(data(Λ)))
 
 GenericSite(site::GenericSite) = site
 GenericSite(site::GenericSite,dir) = site
-GenericSite(site::ConjugateSite) = GenericSite(conj(data(site.site)), ispurification(site))
+GenericSite(site::AdjointSite) = GenericSite(conj(data(site.parent)), ispurification(site))
 
 Base.convert(::Type{LinkSite{T}}, Λ::LinkSite{K}) where {K,T} = LinkSite(convert.(T,Λ.Λ))
+Base.convert(::Type{GenericSite{T}}, site::GenericSite{K}) where {K,T} = GenericSite(convert.(T,data(site)),ispurification(site))
 
-LinearAlgebra.norm(site::GenericSite) = norm(data(site))
-LinearAlgebra.norm(site::LinkSite) = norm(data(site))
-LinearAlgebra.norm(site::VirtualSite) = norm(data(site))
 
-Base.eltype(site::ConjugateSite) = eltype(site.site)
-Base.eltype(::GenericSite{T}) where {T} = T
-Base.eltype(::LinkSite{T}) where {T} = T
-Base.eltype(::OrthogonalLinkSite{T}) where {T} = T
-Base.eltype(::VirtualSite{T}) where {T} = T
+LinearAlgebra.norm(site::AbstractSite) = norm(data(site))
+# LinearAlgebra.norm(site::LinkSite) = norm(data(site))
+# LinearAlgebra.norm(site::VirtualSite) = norm(data(site))
+
+# Base.eltype(site::BraSite) = eltype(site.site)
+Base.eltype(::AbstractSite{T,N}) where {T,N} = T
+Base.eltype(::AdjointSite{T,N,S}) where {T,N,S} = T
+# Base.eltype(::LinkSite{T}) where {T} = T
+# Base.eltype(::OrthogonalLinkSite{T}) where {T} = T
+# Base.eltype(::VirtualSite{T}) where {T} = T
 
 function LinearAlgebra.ishermitian(site::MPOsite)
 	ss = size(site)
@@ -149,7 +171,7 @@ function LinearAlgebra.svd(site::GenericSite, orth = :leftorthogonal)
 end
 
 reverse_direction(site::GenericSite) = GenericSite(permutedims(data(site),[3,2,1]), site.purification)
-reverse_direction(site::ConjugateSite) = reverse_direction(site.site)'
+reverse_direction(site::AdjointSite) = reverse_direction(site.parent)'
 
 Base.transpose(G::VirtualSite) = VirtualSite(Matrix(transpose(G.Λ)))
 Base.transpose(Λ::LinkSite) = Λ
@@ -157,33 +179,51 @@ Base.transpose(Λ::LinkSite) = Λ
 Base.:*(Γ::GenericSite, α::Number) = GenericSite(α*data(Γ),Γ.purification)
 Base.:*(α::Number, Γ::GenericSite) = GenericSite(α*data(Γ),Γ.purification)
 Base.:/(Γ::GenericSite, α::Number) = GenericSite(data(Γ)/α,Γ.purification)
-Base.:*(Λ::LinkSite, G::VirtualSite) = VirtualSite(reshape(Λ.Λ,size(G,1),1) .* G.Λ)
-Base.:*(G::VirtualSite, Λ::LinkSite) = VirtualSite(reshape(Λ.Λ,1,size(G,2)) .* G.Λ)
+Base.:*(Λ::LinkSite, G::VirtualSite) = VirtualSite(reshape(diag(Λ.Λ),size(G,1),1) .* G.Λ)
+Base.:*(G::VirtualSite, Λ::LinkSite) = VirtualSite(reshape(diag(Λ.Λ),1,size(G,2)) .* G.Λ)
 Base.:/(Γ::LinkSite, α::Number) = LinkSite(data(Γ)/α)
 Base.:/(Γ::VirtualSite, α::Number) = VirtualSite(data(Γ)/α)
 
 
-Base.:*(Λ::LinkSite, Γ::GenericSite) = GenericSite(reshape(Λ.Λ,size(Γ,1),1,1) .* data(Γ), Γ.purification)
-Base.:*(Γ::GenericSite, Λ::LinkSite) = GenericSite(data(Γ) .* reshape(Λ.Λ,1,1,size(Γ,3)), Γ.purification)
+Base.:*(Λ::LinkSite, Γ::GenericSite) = GenericSite(reshape(diag(Λ.Λ),size(Γ,1),1,1) .* data(Γ), Γ.purification)
+Base.:*(Γ::GenericSite, Λ::LinkSite) = GenericSite(data(Γ) .* reshape(diag(Λ.Λ),1,1,size(Γ,3)), Γ.purification)
 function Base.:*(G::VirtualSite, Γ::GenericSite)
-	@tensor Γnew[:] := data(G)[-1,1] * data(Γ)[1,-2,-3]
+	sG = size(G)
+	sΓ = size(Γ)
+	Γnew = reshape(data(G) * reshape(data(Γ),sΓ[1],sΓ[2]*sΓ[3]), sG[1], sΓ[2], sΓ[3])
+	# @tensor Γnew[:] := data(G)[-1,1] * data(Γ)[1,-2,-3]
 	GenericSite(Γnew, Γ.purification)
 end
 function Base.:*(Γ::GenericSite, G::VirtualSite)
-	@tensor Γnew[:] := data(Γ)[-1,-2,1] * data(G)[1,-3]
+	sG = size(G)
+	sΓ = size(Γ)
+	Γnew = reshape(reshape(data(Γ),sΓ[1]*sΓ[2],sΓ[3]) * data(G), sΓ[1], sΓ[2], sG[2])
+	# @tensor Γnew[:] := data(Γ)[-1,-2,1] * data(G)[1,-3]
 	GenericSite(Γnew, Γ.purification)
 end
 
 Base.inv(G::VirtualSite) = VirtualSite(inv(G.Λ))
-Base.inv(Λ::LinkSite) = LinkSite(1 ./ Λ.Λ)
+Base.inv(Λ::LinkSite) = LinkSite(inv(Λ.Λ))
 
 function Base.:*(gate::GenericSquareGate, Γ::Tuple{GenericSite, GenericSite})
-	L, R = data.(Γ)
 	g = data(gate)
-	@tensoropt (5,-1,-4) theta[:] := L[-1,2,5]*R[5,3,-4]*g[-2,-3,2,3]
+	s1,s2 = size.(Γ)
+	m1 = reshape(data(Γ[1]),s1[1]*s1[2],s1[3])	
+	m2 = reshape(data(Γ[2]),s2[1],s2[2]*s2[3])
+	m12 = reshape(m1*m2,s1[1],s1[2],s2[2],s2[3])
+	return @tullio theta[l,lu,ru,r] := m12[l,cl,cr,r]*g[lu,ru,cl,cr]
+	#m12 = reshape(permutedims(reshape(m1*m2,s1[1],s1[2],s2[2],s2[3]),[2,3,1,4]), s1[2]*s2[2],s1[1]*s2[3])
+	#return permutedims(reshape(reshape(g,sg[1]*sg[2],sg[3]*sg[4]) *m12,s1[2],s2[2],s1[1],s2[3]), [3,1,2,4])
+	#@tensoropt (5,-1,-4) theta[:] := L[-1,2,5]*R[5,3,-4]*g[-2,-3,2,3]
 end
 function Base.:*(gate::ScaledIdentityGate{<:Number,4}, Γ::Tuple{GenericSite, GenericSite})
-	@tensor theta[:] := data(gate)*data(Γ[1])[-1,-2,1]*data(Γ[2])[1,-3,-4]
+	s1,s2 = size.(Γ)
+	m1 = reshape(data(Γ[1]),s1[1]*s1[2],s1[3])	
+	m2 = reshape(data(Γ[2]),s2[1],s2[2]*s2[3])	
+	return reshape(rmul!(m1*m2,data(gate)),s1[1],s1[2],s2[2],s2[3]) # Fast at runtime and at compilation
+	#return data(gate)*m1*m2
+	#return reshape(data(gate)*m1*m2,s1[1],s1[2],s2[2],s2[3])
+	#@tensor theta[:] := data(gate)*data(Γ[1])[-1,-2,1]*data(Γ[2])[1,-3,-4]
 end	
 
 # function Base.:*(gate::AbstractSquareGate, Γ::Tuple{OrthogonalLinkSite, OrthogonalLinkSite})
@@ -221,7 +261,6 @@ function apply_two_site_gate(Γ1::OrthogonalLinkSite, Γ2::OrthogonalLinkSite, g
 	@assert Γ1.Λ2 ≈ Γ2.Λ1 "Error in apply_two_site_gate: The sites do not share a link"
 	ΓL = LeftOrthogonalSite(Γ1)
 	ΓR = Γ2.Λ1*RightOrthogonalSite(Γ2)
-
 	U,S,Vt,err = apply_two_site_gate(ΓL, ΓR, gate, args)
 	U2 = inv(Γ1.Λ1)*U
     Vt2 = Vt*inv(Γ2.Λ2)
